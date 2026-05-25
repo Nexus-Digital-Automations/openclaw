@@ -8,7 +8,8 @@ import {
   wrapWebContent,
 } from "./external-content.js";
 
-const START_MARKER_REGEX = /<<<EXTERNAL_UNTRUSTED_CONTENT id="([a-f0-9]{16})">>>/g;
+const START_MARKER_REGEX =
+  /<<<EXTERNAL_UNTRUSTED_CONTENT id="([a-f0-9]{16})"(?:\s+source="[a-z_]+")?>>>/g;
 const END_MARKER_REGEX = /<<<END_EXTERNAL_UNTRUSTED_CONTENT id="([a-f0-9]{16})">>>/g;
 
 function extractMarkerIds(content: string): { start: string[]; end: string[] } {
@@ -90,7 +91,9 @@ describe("external-content security", () => {
     it("wraps content with security boundaries and matching IDs", () => {
       const result = wrapExternalContent("Hello world", { source: "email" });
 
-      expect(result).toMatch(/<<<EXTERNAL_UNTRUSTED_CONTENT id="[a-f0-9]{16}">>>/);
+      expect(result).toMatch(
+        /<<<EXTERNAL_UNTRUSTED_CONTENT id="[a-f0-9]{16}"(?:\s+source="[a-z_]+")?>>>/,
+      );
       expect(result).toMatch(/<<<END_EXTERNAL_UNTRUSTED_CONTENT id="[a-f0-9]{16}">>>/);
       expect(result).toContain("Hello world");
       expect(result).toContain("SECURITY NOTICE");
@@ -99,6 +102,23 @@ describe("external-content security", () => {
       expect(ids.start).toHaveLength(1);
       expect(ids.end).toHaveLength(1);
       expect(ids.start[0]).toBe(ids.end[0]);
+    });
+
+    it("emits source as a structured start-marker attribute", () => {
+      const emailResult = wrapExternalContent("body", { source: "email" });
+      expect(emailResult).toMatch(
+        /<<<EXTERNAL_UNTRUSTED_CONTENT id="[a-f0-9]{16}" source="email">>>/,
+      );
+
+      const webhookResult = wrapExternalContent("body", { source: "webhook" });
+      expect(webhookResult).toMatch(
+        /<<<EXTERNAL_UNTRUSTED_CONTENT id="[a-f0-9]{16}" source="webhook">>>/,
+      );
+
+      // End marker stays attribute-free — origin only belongs on the opening
+      // boundary; carrying it on the closer adds no signal and doubles spoof
+      // surface.
+      expect(emailResult).toMatch(/<<<END_EXTERNAL_UNTRUSTED_CONTENT id="[a-f0-9]{16}">>>/);
     });
 
     it("includes sender metadata when provided", () => {
@@ -142,7 +162,9 @@ describe("external-content security", () => {
       });
 
       expect(result).not.toContain("SECURITY NOTICE");
-      expect(result).toMatch(/<<<EXTERNAL_UNTRUSTED_CONTENT id="[a-f0-9]{16}">>>/);
+      expect(result).toMatch(
+        /<<<EXTERNAL_UNTRUSTED_CONTENT id="[a-f0-9]{16}"(?:\s+source="[a-z_]+")?>>>/,
+      );
     });
 
     it.each([
@@ -305,7 +327,9 @@ describe("external-content security", () => {
     it("wraps web search content with boundaries", () => {
       const result = wrapWebContent("Search snippet", "web_search");
 
-      expect(result).toMatch(/<<<EXTERNAL_UNTRUSTED_CONTENT id="[a-f0-9]{16}">>>/);
+      expect(result).toMatch(
+        /<<<EXTERNAL_UNTRUSTED_CONTENT id="[a-f0-9]{16}"(?:\s+source="[a-z_]+")?>>>/,
+      );
       expect(result).toMatch(/<<<END_EXTERNAL_UNTRUSTED_CONTENT id="[a-f0-9]{16}">>>/);
       expect(result).toContain("Search snippet");
       expect(result).not.toContain("SECURITY NOTICE");
@@ -467,7 +491,9 @@ describe("external-content security", () => {
       });
 
       // Verify the content is wrapped with security boundaries
-      expect(result).toMatch(/<<<EXTERNAL_UNTRUSTED_CONTENT id="[a-f0-9]{16}">>>/);
+      expect(result).toMatch(
+        /<<<EXTERNAL_UNTRUSTED_CONTENT id="[a-f0-9]{16}"(?:\s+source="[a-z_]+")?>>>/,
+      );
       expect(result).toMatch(/<<<END_EXTERNAL_UNTRUSTED_CONTENT id="[a-f0-9]{16}">>>/);
 
       // Verify security warning is present
@@ -495,7 +521,9 @@ describe("external-content security", () => {
       const result = wrapExternalContent(maliciousContent, { source: "email" });
 
       // The malicious tags are contained within the safe boundaries
-      const startMatch = result.match(/<<<EXTERNAL_UNTRUSTED_CONTENT id="[a-f0-9]{16}">>>/);
+      const startMatch = result.match(
+        /<<<EXTERNAL_UNTRUSTED_CONTENT id="[a-f0-9]{16}"(?:\s+source="[a-z_]+")?>>>/,
+      );
       if (startMatch === null) {
         throw new Error("Expected external content start marker");
       }

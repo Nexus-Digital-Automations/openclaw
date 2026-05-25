@@ -67,8 +67,13 @@ function createExternalContentMarkerId(): string {
   return randomBytes(8).toString("hex");
 }
 
-function createExternalContentStartMarker(id: string): string {
-  return `<<<${EXTERNAL_CONTENT_START_NAME} id="${id}">>>`;
+// Source is emitted as a structured attribute (not just inside the human-readable
+// metadata block) so downstream taint-propagation passes can read origin without
+// re-parsing free-form text. The attribute character set is intentionally narrow
+// to defeat injection via a forged source value.
+function createExternalContentStartMarker(id: string, source?: ExternalContentSource): string {
+  const sourceAttr = source && /^[a-z_]+$/.test(source) ? ` source="${source}"` : "";
+  return `<<<${EXTERNAL_CONTENT_START_NAME} id="${id}"${sourceAttr}>>>`;
 }
 
 function createExternalContentEndMarker(id: string): string {
@@ -246,14 +251,17 @@ function replaceMarkers(content: string): string {
     return content;
   }
   const replacements: Array<{ start: number; end: number; value: string }> = [];
-  // Match markers with or without id attribute (handles both legacy and spoofed markers)
+  // Tolerates any number of attribute pairs so a spoof that adds source="..." or
+  // future fields still trips this sanitizer instead of slipping through as a
+  // structurally valid forged marker.
   const patterns: Array<{ regex: RegExp; value: string }> = [
     {
-      regex: /<<<\s*EXTERNAL[\s_]+UNTRUSTED[\s_]+CONTENT(?:\s+id="[^"]{1,128}")?\s*>>>/gi,
+      regex: /<<<\s*EXTERNAL[\s_]+UNTRUSTED[\s_]+CONTENT(?:\s+[a-z_]+="[^"]{1,128}")*\s*>>>/gi,
       value: "[[MARKER_SANITIZED]]",
     },
     {
-      regex: /<<<\s*END[\s_]+EXTERNAL[\s_]+UNTRUSTED[\s_]+CONTENT(?:\s+id="[^"]{1,128}")?\s*>>>/gi,
+      regex:
+        /<<<\s*END[\s_]+EXTERNAL[\s_]+UNTRUSTED[\s_]+CONTENT(?:\s+[a-z_]+="[^"]{1,128}")*\s*>>>/gi,
       value: "[[END_MARKER_SANITIZED]]",
     },
   ];
@@ -358,7 +366,7 @@ export function wrapExternalContent(content: string, options: WrapExternalConten
 
   return [
     warningBlock,
-    createExternalContentStartMarker(markerId),
+    createExternalContentStartMarker(markerId, source),
     metadata,
     "---",
     sanitized,

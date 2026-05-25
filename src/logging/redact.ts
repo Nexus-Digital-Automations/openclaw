@@ -1,5 +1,6 @@
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { compileConfigRegex } from "../security/config-regex.js";
+import { escapeRegExp } from "../shared/regexp.js";
 import { readLoggingConfig } from "./config.js";
 import { replacePatternBounded } from "./redact-bounded.js";
 
@@ -209,6 +210,65 @@ export function redactSensitiveText(text: string, options?: RedactOptions): stri
     return text;
   }
   return redactText(text, resolved.patterns);
+}
+
+// Compiles literals into escaped global regex patterns so they merge with the
+// regex-based defaults in redactSensitiveText. Empty entries and obviously
+// non-secret tokens (length < 4) are dropped because masking them would alias
+// common substrings like "true" or short paths across unrelated text.
+function compileLiteralPatterns(literals: Iterable<string>): RegExp[] {
+  const seen = new Set<string>();
+  const patterns: RegExp[] = [];
+  for (const literal of literals) {
+    if (typeof literal !== "string" || literal.length < 4 || seen.has(literal)) {
+      continue;
+    }
+    seen.add(literal);
+    patterns.push(new RegExp(escapeRegExp(literal), "g"));
+  }
+  return patterns;
+}
+
+// Use when the caller holds a SecretRefResolveCache from src/secrets/resolve.ts
+// whose `resolvedValues` set captured exact byte strings the system decrypted
+// during this request. Closes the gap where a custom-format token would slip
+// through the regex defaults.
+export function redactSensitiveTextWithLiterals(
+  text: string,
+  literals: Iterable<string>,
+  options?: RedactOptions,
+): string {
+  if (!text) {
+    return text;
+  }
+  const resolved = resolveRedactOptions(options);
+  if (resolved.mode === "off") {
+    return text;
+  }
+  const literalPatterns = compileLiteralPatterns(literals);
+  if (!resolved.patterns.length && !literalPatterns.length) {
+    return text;
+  }
+  return redactText(text, [...literalPatterns, ...resolved.patterns]);
+}
+
+// Structured variant of redactSecrets that also masks per-session literals.
+// Mirrors the recursion contract of redactStructuredSecretValue so nested
+// objects, arrays, and field-sensitive strings all get the same treatment.
+export function redactSecretsWithLiterals<T>(value: T, literals: Iterable<string>): T {
+  const literalPatterns = compileLiteralPatterns(literals);
+  const baseOptions = resolveToolPayloadRedaction();
+  const mergedOptions: RedactOptions = {
+    mode: baseOptions.mode,
+    patterns: [...literalPatterns, ...resolvePatterns(baseOptions.patterns)],
+  };
+  if (typeof value === "string") {
+    return redactSensitiveText(value, mergedOptions) as T;
+  }
+  if (value === null || value === undefined || typeof value !== "object") {
+    return value;
+  }
+  return redactStructuredSecretValue("", value, new WeakSet<object>(), mergedOptions) as T;
 }
 
 export function redactToolDetail(detail: string): string {

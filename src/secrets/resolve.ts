@@ -889,7 +889,15 @@ export async function resolveSecretRefValues(
           message: `Secret provider "${result.group.providerName}" did not return id "${ref.id}".`,
         });
       }
-      resolved.set(secretRefKey(ref), result.values.get(ref.id));
+      const value = result.values.get(ref.id);
+      resolved.set(secretRefKey(ref), value);
+      // Pattern-based redaction in src/logging/redact.ts can miss custom-format
+      // tokens. Recording the exact resolved bytes lets the cache owner pass
+      // these literals into redactSensitiveTextWithLiterals so the system masks
+      // values it itself decrypted, even when no regex matches.
+      if (options.cache?.resolvedValues && typeof value === "string" && value.length > 0) {
+        options.cache.resolvedValues.add(value);
+      }
     }
   }
   return resolved;

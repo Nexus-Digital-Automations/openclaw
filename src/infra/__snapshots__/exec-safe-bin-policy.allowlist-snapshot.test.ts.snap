@@ -1,0 +1,160 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`exec-safe-bin policy allowlist snapshot > locks DEFAULT_SAFE_BINS — owner approval required to change > default-safe-bins 1`] = `
+[
+  "cut",
+  "head",
+  "tail",
+  "tr",
+  "uniq",
+  "wc",
+]
+`;
+
+exports[`exec-safe-bin policy allowlist snapshot > locks per-bin policy fixtures — owner approval required to change > safe-bin-profile-fixtures 1`] = `
+{
+  "cut": {
+    "allowedValueFlags": [
+      "--bytes",
+      "--characters",
+      "--delimiter",
+      "--fields",
+      "--output-delimiter",
+      "-b",
+      "-c",
+      "-d",
+      "-f",
+    ],
+    "deniedFlags": [],
+    "maxPositional": 0,
+    "minPositional": null,
+  },
+  "grep": {
+    "allowedValueFlags": [
+      "--after-context",
+      "--before-context",
+      "--binary-files",
+      "--context",
+      "--devices",
+      "--exclude",
+      "--include",
+      "--label",
+      "--max-count",
+      "--regexp",
+      "-A",
+      "-B",
+      "-C",
+      "-D",
+      "-e",
+      "-m",
+    ],
+    "deniedFlags": [
+      "--dereference-recursive",
+      "--directories",
+      "--exclude-from",
+      "--file",
+      "--recursive",
+      "-R",
+      "-d",
+      "-f",
+      "-r",
+    ],
+    "maxPositional": 0,
+    "minPositional": null,
+  },
+  "head": {
+    "allowedValueFlags": [
+      "--bytes",
+      "--lines",
+      "-c",
+      "-n",
+    ],
+    "deniedFlags": [],
+    "maxPositional": 0,
+    "minPositional": null,
+  },
+  "jq": {
+    "allowedValueFlags": [
+      "--arg",
+      "--argjson",
+      "--argstr",
+    ],
+    "deniedFlags": [
+      "--argfile",
+      "--from-file",
+      "--library-path",
+      "--rawfile",
+      "--slurpfile",
+      "-L",
+      "-f",
+    ],
+    "maxPositional": 1,
+    "minPositional": null,
+  },
+  "sort": {
+    "allowedValueFlags": [
+      "--batch-size",
+      "--buffer-size",
+      "--field-separator",
+      "--key",
+      "--parallel",
+      "-S",
+      "-k",
+      "-t",
+    ],
+    "deniedFlags": [
+      "--compress-program",
+      "--files0-from",
+      "--output",
+      "--random-source",
+      "--temporary-directory",
+      "-T",
+      "-o",
+    ],
+    "maxPositional": 0,
+    "minPositional": null,
+  },
+  "tail": {
+    "allowedValueFlags": [
+      "--bytes",
+      "--lines",
+      "--max-unchanged-stats",
+      "--pid",
+      "--sleep-interval",
+      "-c",
+      "-n",
+    ],
+    "deniedFlags": [],
+    "maxPositional": 0,
+    "minPositional": null,
+  },
+  "tr": {
+    "allowedValueFlags": [],
+    "deniedFlags": [],
+    "maxPositional": 2,
+    "minPositional": 1,
+  },
+  "uniq": {
+    "allowedValueFlags": [
+      "--check-chars",
+      "--group",
+      "--skip-chars",
+      "--skip-fields",
+      "-f",
+      "-s",
+      "-w",
+    ],
+    "deniedFlags": [],
+    "maxPositional": 0,
+    "minPositional": null,
+  },
+  "wc": {
+    "allowedValueFlags": [],
+    "deniedFlags": [
+      "--files0-from",
+    ],
+    "maxPositional": 0,
+    "minPositional": null,
+  },
+}
+`;

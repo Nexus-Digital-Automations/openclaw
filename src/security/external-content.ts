@@ -346,6 +346,22 @@ function sanitizeExternalContentText(content: string): string {
   return replaceLlmSpecialTokenLiterals(replaceMarkers(stripInvisibleCharacters(content)));
 }
 
+/**
+ * Strip injection-style LLM special-token literals (`<|im_start|>`, `[INST]`,
+ * `<<SYS>>`, etc.) from a skill markdown body before it reaches agent
+ * context. A SKILL.md is technically trusted (it sits inside the workspace
+ * skills root), but an author may paste in untrusted text — this pass keeps
+ * the most obvious injection vectors out of the read-tool result.
+ *
+ * Unlike `sanitizeExternalContentText`, this does NOT strip markers or
+ * normalize Unicode — skill docs may legitimately use those.
+ *
+ * @stable
+ */
+export function sanitizeSkillMarkdownText(content: string): string {
+  return replaceLlmSpecialTokenLiterals(content);
+}
+
 export type WrapExternalContentOptions = {
   /** Source of the external content */
   source: ExternalContentSource;

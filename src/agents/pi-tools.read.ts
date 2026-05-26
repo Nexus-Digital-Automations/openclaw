@@ -9,7 +9,7 @@ import { expandHomePrefix, resolveOsHomeDir } from "../infra/home-dir.js";
 import { hasEncodedFileUrlSeparator, trySafeFileURLToPath } from "../infra/local-file-access.js";
 import { detectMime } from "../media/mime.js";
 import { sniffMimeFromBase64 } from "../media/sniff-mime-from-base64.js";
-import { wrapExternalContent } from "../security/external-content.js";
+import { sanitizeSkillMarkdownText, wrapExternalContent } from "../security/external-content.js";
 import type { ImageSanitizationLimits } from "./image-sanitization.js";
 import { toRelativeWorkspacePath } from "./path-policy.js";
 import { wrapEditToolWithRecovery } from "./pi-tools.host-edit.js";
@@ -799,9 +799,44 @@ export function createOpenClawReadTool(
       const strippedDetailsResult = stripReadTruncationContentDetails(result);
       const normalizedResult = await normalizeReadImageResult(strippedDetailsResult, filePath);
       const zoneWrapped = wrapResultIfFromUntrustedZone(normalizedResult, filePath);
-      return sanitizeToolResultImages(zoneWrapped, `read:${filePath}`, options?.imageSanitization);
+      const skillStripped = stripSkillMarkdownInjectionTokens(zoneWrapped, filePath);
+      return sanitizeToolResultImages(
+        skillStripped,
+        `read:${filePath}`,
+        options?.imageSanitization,
+      );
     },
   };
+}
+
+// Reads of SKILL.md (the workspace skill body filename) may surface model-
+// facing markdown that includes injection-style LLM special tokens. Strip
+// just the special-token literals — markers and Unicode are not normalized
+// here because legitimate skill docs may reference them. Trusted-zone reads
+// of other files are untouched.
+function stripSkillMarkdownInjectionTokens(
+  result: AgentToolResult<unknown>,
+  filePath: string,
+): AgentToolResult<unknown> {
+  if (!filePath || path.basename(filePath).toLowerCase() !== "skill.md") {
+    return result;
+  }
+  const content = Array.isArray(result.content) ? result.content : [];
+  const nextContent = content.map((block) => {
+    if (
+      block &&
+      typeof block === "object" &&
+      (block as { type?: unknown }).type === "text" &&
+      typeof (block as { text?: unknown }).text === "string"
+    ) {
+      const textBlock = block as TextContentBlock & { text: string };
+      return Object.assign({}, textBlock, {
+        text: sanitizeSkillMarkdownText(textBlock.text),
+      }) satisfies TextContentBlock;
+    }
+    return block;
+  });
+  return { ...result, content: nextContent };
 }
 
 // Untrusted-zone reads represent model-generated or externally-fetched

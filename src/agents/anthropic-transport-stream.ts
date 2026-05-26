@@ -9,6 +9,7 @@ import {
   type SimpleStreamOptions,
   type ThinkingLevel,
 } from "@earendil-works/pi-ai";
+import { createSubsystemLogger } from "../logging/subsystem.js";
 import { MALFORMED_STREAMING_FRAGMENT_ERROR_MESSAGE } from "../shared/assistant-error-format.js";
 import { normalizeLowercaseStringOrEmpty } from "../shared/string-coerce.js";
 import {
@@ -17,6 +18,7 @@ import {
 } from "./anthropic-payload-policy.js";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./copilot-dynamic-headers.js";
 import { parseJsonObjectPreservingUnsafeIntegers } from "./json-unsafe-integers.js";
+import { createOutputFirewallState, scanOutputChunk } from "./output-firewall.js";
 import { resolveProviderEndpoint } from "./provider-attribution.js";
 import { buildGuardedModelFetch } from "./provider-transport-fetch.js";
 import { transformTransportMessages } from "./transport-message-transform.js";
@@ -30,6 +32,8 @@ import {
   sanitizeNonEmptyTransportPayloadText,
   sanitizeTransportPayloadText,
 } from "./transport-stream-shared.js";
+
+const log = createSubsystemLogger("anthropic-transport");
 
 const CLAUDE_CODE_VERSION = "2.1.75";
 const CLAUDE_CODE_TOOLS = [
@@ -959,6 +963,19 @@ export function createAnthropicMessagesTransportStreamFn(): StreamFn {
         const reasoningContentTextBlocks = new Map<number, number>();
         const eventIndexKey = (eventIndex: unknown) =>
           typeof eventIndex === "number" ? eventIndex : -1;
+        let firewallState = createOutputFirewallState();
+        const firewallTextDelta = (raw: string): string => {
+          const verdict = scanOutputChunk(raw, firewallState);
+          firewallState = verdict.nextState;
+          if (verdict.kind !== "block") {
+            return raw;
+          }
+          log.warn(
+            `[output-firewall] blocked Anthropic text delta with sensitive literal match=${verdict.matched.length}b`,
+            { event: "output_firewall.block" },
+          );
+          return verdict.sanitized;
+        };
         const appendReasoningContentThinkingDelta = (
           eventIndex: unknown,
           rawText: unknown,
@@ -1025,11 +1042,12 @@ export function createAnthropicMessagesTransportStreamFn(): StreamFn {
               partial: output as never,
             });
           }
-          block.text += text;
+          const safeText = firewallTextDelta(text);
+          block.text += safeText;
           stream.push({
             type: "text_delta",
             contentIndex,
-            delta: text,
+            delta: safeText,
             partial: output as never,
           });
           return true;
@@ -1095,10 +1113,11 @@ export function createAnthropicMessagesTransportStreamFn(): StreamFn {
             const contentBlock = event.content_block as Record<string, unknown> | undefined;
             const index = typeof event.index === "number" ? event.index : -1;
             if (contentBlock?.type === "text") {
-              const text =
+              const rawText =
                 typeof contentBlock.text === "string"
                   ? sanitizeTransportPayloadText(contentBlock.text)
                   : "";
+              const text = rawText.length > 0 ? firewallTextDelta(rawText) : rawText;
               const block: TransportContentBlock = { type: "text", text, index };
               output.content.push(block);
               const contentIndex = output.content.length - 1;
@@ -1211,11 +1230,12 @@ export function createAnthropicMessagesTransportStreamFn(): StreamFn {
                 const text = sanitizeTransportPayloadText(delta.content);
                 if (text.length > 0) {
                   if (block?.type === "text") {
-                    block.text += text;
+                    const safeText = firewallTextDelta(text);
+                    block.text += safeText;
                     stream.push({
                       type: "text_delta",
                       contentIndex: index,
-                      delta: text,
+                      delta: safeText,
                       partial: output as never,
                     });
                     appendedContent = true;
@@ -1244,11 +1264,12 @@ export function createAnthropicMessagesTransportStreamFn(): StreamFn {
               delta?.type === "text_delta" &&
               typeof delta.text === "string"
             ) {
-              block.text += delta.text;
+              const safeText = firewallTextDelta(delta.text);
+              block.text += safeText;
               stream.push({
                 type: "text_delta",
                 contentIndex: index,
-                delta: delta.text,
+                delta: safeText,
                 partial: output as never,
               });
               continue;

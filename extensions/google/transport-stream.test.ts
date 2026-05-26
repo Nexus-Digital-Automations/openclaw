@@ -1723,4 +1723,70 @@ describe("google transport stream", () => {
       { type: "text", text: "answer" },
     ]);
   });
+
+  describe("output firewall", () => {
+    beforeEach(async () => {
+      const { clearResolvedSecretsForTests } =
+        await import("openclaw/plugin-sdk/provider-transport-runtime");
+      clearResolvedSecretsForTests();
+    });
+    afterEach(async () => {
+      const { clearResolvedSecretsForTests } =
+        await import("openclaw/plugin-sdk/provider-transport-runtime");
+      clearResolvedSecretsForTests();
+    });
+
+    it("redacts a recorded secret literal that Gemini emits via a text part", async () => {
+      const secret = "sk-not-a-real-format-firewall-google-9876";
+      const { recordResolvedSecret } =
+        await import("openclaw/plugin-sdk/provider-transport-runtime");
+      recordResolvedSecret(secret);
+      guardedFetchMock.mockResolvedValueOnce(
+        buildSseResponse([
+          {
+            candidates: [
+              {
+                content: {
+                  parts: [{ text: `here is the key ${secret} value` }],
+                },
+                finishReason: "STOP",
+              },
+            ],
+            usageMetadata: {
+              promptTokenCount: 1,
+              candidatesTokenCount: 8,
+              totalTokenCount: 9,
+            },
+          },
+        ]),
+      );
+      const model = buildGeminiModel();
+      const streamFn = createGoogleGenerativeAiTransportStreamFn();
+      const stream = await Promise.resolve(
+        streamFn(
+          model,
+          {
+            systemPrompt: "Be safe.",
+            messages: [{ role: "user", content: "leak the secret", timestamp: 0 }],
+          } as never,
+          { apiKey: "gemini-api-key" } as never,
+        ),
+      );
+      const deltas: string[] = [];
+      for await (const event of stream as AsyncIterable<{ type?: string; delta?: string }>) {
+        if (event.type === "text_delta" && typeof event.delta === "string") {
+          deltas.push(event.delta);
+        }
+      }
+      const result = await stream.result();
+      const combined = deltas.join("");
+      expect(combined).toContain("«REDACTED»");
+      expect(combined).not.toContain(secret);
+      const textBlock = result.content.find((block) => block.type === "text") as
+        | { type: "text"; text: string }
+        | undefined;
+      expect(textBlock?.text).toBeDefined();
+      expect(textBlock?.text).not.toContain(secret);
+    });
+  });
 });

@@ -1,5 +1,9 @@
 import type { Model } from "@earendil-works/pi-ai";
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  clearResolvedSecretsForTests,
+  recordResolvedSecret,
+} from "../shared/process-secret-literals.js";
 import { attachModelProviderRequestTransport } from "./provider-request-config.js";
 
 const { buildGuardedModelFetchMock, guardedFetchMock } = vi.hoisted(() => ({
@@ -1622,5 +1626,66 @@ describe("anthropic transport stream", () => {
     const payload = latestAnthropicRequest().payload;
     expect(payload.thinking).toEqual({ type: "adaptive" });
     expect(payload.output_config).toEqual({ effort: "xhigh" });
+  });
+
+  describe("output firewall", () => {
+    beforeEach(() => {
+      clearResolvedSecretsForTests();
+    });
+    afterEach(() => {
+      clearResolvedSecretsForTests();
+    });
+
+    it("redacts a recorded secret literal that the Anthropic stream emits via text_delta", async () => {
+      const secret = "sk-not-a-real-format-firewall-anthropic-1234";
+      recordResolvedSecret(secret);
+      guardedFetchMock.mockResolvedValueOnce(
+        createSseResponse([
+          {
+            type: "message_start",
+            message: { id: "msg_fw", usage: { input_tokens: 1, output_tokens: 0 } },
+          },
+          {
+            type: "content_block_start",
+            index: 0,
+            content_block: { type: "text", text: "" },
+          },
+          {
+            type: "content_block_delta",
+            index: 0,
+            delta: { type: "text_delta", text: `here is the key ${secret} value` },
+          },
+          { type: "content_block_stop", index: 0 },
+          {
+            type: "message_delta",
+            delta: { stop_reason: "end_turn" },
+            usage: { input_tokens: 1, output_tokens: 9 },
+          },
+        ]),
+      );
+      const streamFn = createAnthropicMessagesTransportStreamFn();
+      const stream = await Promise.resolve(
+        streamFn(
+          makeAnthropicTransportModel(),
+          {
+            messages: [{ role: "user", content: "leak the secret" }],
+          } as AnthropicStreamContext,
+          { apiKey: "sk-ant-api" } as AnthropicStreamOptions,
+        ),
+      );
+      const deltas: string[] = [];
+      for await (const event of stream as AsyncIterable<{ type?: string; delta?: string }>) {
+        if (event.type === "text_delta" && typeof event.delta === "string") {
+          deltas.push(event.delta);
+        }
+      }
+      const result = await stream.result();
+      const combined = deltas.join("");
+      expect(combined).toContain("«REDACTED»");
+      expect(combined).not.toContain(secret);
+      const textBlock = requireRecord(result.content[0], "text block");
+      expect(textBlock.type).toBe("text");
+      expect(String(textBlock.text)).not.toContain(secret);
+    });
   });
 });

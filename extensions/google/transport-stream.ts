@@ -7,16 +7,19 @@ import {
   type SimpleStreamOptions,
   type ThinkingLevel,
 } from "@earendil-works/pi-ai";
+import { createSubsystemLogger } from "openclaw/plugin-sdk/logging-core";
 import { createProviderHttpError } from "openclaw/plugin-sdk/provider-http";
 import {
   buildGuardedModelFetch,
   coerceTransportToolCallArguments,
   createEmptyTransportUsage,
+  createOutputFirewallState,
   createWritableTransportEventStream,
   failTransportStream,
   finalizeTransportStream,
   mergeTransportHeaders,
   sanitizeTransportPayloadText,
+  scanOutputChunk,
   stripSystemPromptCacheBoundary,
   transformTransportMessages,
   type WritableTransportStream,
@@ -37,6 +40,8 @@ import {
   isGoogleVertexCredentialsMarker,
   resolveGoogleVertexAuthorizedUserHeaders,
 } from "./vertex-adc.js";
+
+const log = createSubsystemLogger("google-transport");
 
 type CanonicalGoogleTransportApi = "google-generative-ai" | "google-vertex";
 type GoogleTransportApi = CanonicalGoogleTransportApi | "openclaw-google-generative-ai-transport";
@@ -202,9 +207,7 @@ function hasGeminiThoughtSignatureTruncationFootprint(value: string): boolean {
   );
 }
 
-function sanitizeGeminiThoughtSignature(
-  thoughtSignature: string | undefined,
-): string | undefined {
+function sanitizeGeminiThoughtSignature(thoughtSignature: string | undefined): string | undefined {
   if (typeof thoughtSignature !== "string") {
     return undefined;
   }
@@ -552,9 +555,7 @@ function convertGoogleMessages(model: GoogleTransportModel, context: Context) {
             : undefined;
           parts.push({
             text: sanitizeTransportPayloadText(block.text),
-            ...(sanitizedTextSignature
-              ? { thoughtSignature: sanitizedTextSignature }
-              : {}),
+            ...(sanitizedTextSignature ? { thoughtSignature: sanitizedTextSignature } : {}),
           });
           continue;
         }
@@ -1229,6 +1230,19 @@ function createGoogleTransportStreamFn(kind: CanonicalGoogleTransportApi): Strea
           request: params,
         });
         stream.push({ type: "start", partial: output as never });
+        let firewallState = createOutputFirewallState();
+        const firewallTextDelta = (raw: string): string => {
+          const verdict = scanOutputChunk(raw, firewallState);
+          firewallState = verdict.nextState;
+          if (verdict.kind !== "block") {
+            return raw;
+          }
+          log.warn(
+            `[output-firewall] blocked Google text delta with sensitive literal match=${verdict.matched.length}b`,
+            { event: "output_firewall.block" },
+          );
+          return verdict.sanitized;
+        };
         let currentBlockIndex = -1;
         const chunks =
           sse.firstChunk === undefined
@@ -1301,7 +1315,9 @@ function createGoogleTransportStreamFn(kind: CanonicalGoogleTransportApi): Strea
                     partial: output as never,
                   });
                 } else if (activeBlock?.type === "text") {
-                  activeBlock.text += part.text;
+                  const safeText =
+                    typeof part.text === "string" ? firewallTextDelta(part.text) : part.text;
+                  activeBlock.text += safeText;
                   activeBlock.textSignature = retainThoughtSignature(
                     activeBlock.textSignature,
                     part.thoughtSignature,
@@ -1309,7 +1325,7 @@ function createGoogleTransportStreamFn(kind: CanonicalGoogleTransportApi): Strea
                   stream.push({
                     type: "text_delta",
                     contentIndex: currentBlockIndex,
-                    delta: part.text,
+                    delta: safeText,
                     partial: output as never,
                   });
                 }

@@ -62,6 +62,7 @@ import {
   resolveOpenAIStrictToolFlagForInventory,
   resolveOpenAIStrictToolSetting,
 } from "./openai-tool-schema.js";
+import { createOutputFirewallState, scanOutputChunk } from "./output-firewall.js";
 import { resolveProviderRequestPolicyConfig } from "./provider-request-config.js";
 import {
   buildGuardedModelFetch,
@@ -1379,6 +1380,7 @@ async function processResponsesStream(
   const eventTypes = new Map<string, number>();
   const sseDebugMode = resolveModelSseDebugMode();
   const blockIndex = () => output.content.length - 1;
+  let firewallState = createOutputFirewallState();
   const guardedStream = withResponsesFirstEventTimeout(
     openaiStream,
     model,
@@ -1443,11 +1445,21 @@ async function processResponsesStream(
       }
     } else if (type === "response.output_text.delta" || type === "response.refusal.delta") {
       if (currentItem?.type === "message" && currentBlock?.type === "text") {
-        currentBlock.text = `${stringifyUnknown(currentBlock.text)}${stringifyUnknown(event.delta)}`;
+        const rawDelta = stringifyUnknown(event.delta);
+        const verdict = scanOutputChunk(rawDelta, firewallState);
+        firewallState = verdict.nextState;
+        if (verdict.kind === "block") {
+          log.warn(
+            `[output-firewall] blocked OpenAI text delta with sensitive literal match=${verdict.matched.length}b session=${options?.sessionId ?? "<unknown>"}`,
+            { event: "output_firewall.block", sessionId: options?.sessionId },
+          );
+        }
+        const safeDelta = verdict.kind === "block" ? verdict.sanitized : rawDelta;
+        currentBlock.text = `${stringifyUnknown(currentBlock.text)}${safeDelta}`;
         stream.push({
           type: "text_delta",
           contentIndex: blockIndex(),
-          delta: stringifyUnknown(event.delta),
+          delta: safeDelta,
           partial: output,
         });
       }

@@ -43,18 +43,54 @@
 
 **Acceptance:** a synthetic external-content string like `EXT-CONTENT-MARKER-123` embedded in a tool call's argv triggers approval even for `git`, which is normally auto-allowed.
 
-### 1.E — memory origin metadata
+### 1.E — memory origin metadata — DEFERRED
 
-- Extend `packages/memory-host-sdk` write API with `{ origin: "trusted" | "untrusted"; sourceSessionId?: string }`; default to `trusted` on legacy writes (back-compat).
-- Read API stays back-compat. `agents/system-prompt.ts:buildAgentSystemPrompt` wraps untrusted-origin snippets in external-content markers before injection.
+Status: **deferred**. The spec assumed a public write API existed in
+`packages/memory-host-sdk` that could be additively extended. Discovery during
+implementation found:
 
-**Acceptance:** a memory entry written with `origin: "untrusted"` is wrapped in the system prompt; reads of legacy entries (no origin) act as `trusted`.
+1. No public write API. Memory writes flow through internal file-watcher sync
+   and embedding ops on `MemoryIndexManager`'s private methods. Adding origin
+   metadata at write time requires inventing a new public surface, not
+   extending one.
+2. Persistence is SQLite (`chunks` table). Adding `origin` + `sourceSessionId`
+   columns is a schema migration with rollback considerations.
+3. The prompt-section builder returns `string[]` — per-snippet wrap requires
+   refactoring the contract to surface metadata, which is a breaking change
+   for external plugin consumers of the SDK.
 
-### 1.F — per-tool-call nonce echo gate
+These are real changes worth doing, but each is on the order of a separate
+multi-commit effort with SDK versioning. Recording the gap here; revisit
+when the user wants to plan the API design explicitly.
 
-- `gateway/live-tool-probe-utils.ts:hasExpectedToolNonce` already exists for liveness. Reuse it: inject a single-use random nonce in the tool-call envelope dispatch path (`agents/pi-embedded-subscribe.handlers.tools.ts`). If the nonce appears anywhere in model free-text output between dispatch and resolve, reject the tool call.
+**Concrete acceptance still applicable when this is picked up:** a memory
+entry written with `origin: "untrusted"` is wrapped in the system prompt; reads
+of legacy entries (no origin) act as `trusted`.
 
-**Acceptance:** synthetic injection that gets the model to echo the nonce verbatim rejects the tool call with a named error code.
+### 1.F — per-tool-call nonce echo gate — DEFERRED
+
+Status: **deferred**. The plan said "reuse `hasExpectedToolNonce`" from the
+gateway liveness probe. Discovery showed the function shape is wrong for this
+use case:
+
+1. The probe util tests whether a gateway-injected nonce round-trips through
+   a tool the gateway itself controls. There's no model output watcher.
+2. Watching model free-text means per-transport state-machine modification
+   in `openai-transport-stream.ts`, `anthropic-transport-stream.ts`, and
+   `extensions/google/transport-stream.ts` — three large stream handlers,
+   not one shared seam.
+3. Every simplification (post-response scan, hidden tool-descriptor field,
+   synthetic injection prompt) removes most of the defense value or hits
+   prompt-cache breakage.
+
+**The structurally adjacent control is Phase 2.A — the output firewall.** It
+has the same "scan model output" shape but doesn't require per-tool-call
+nonce design; it scans against an already-canonical literal set (process
+secrets + external-content bodies). Building 2.A makes 1.F a thin layer on
+top later: same scanner, extra literals.
+
+Acceptance still applicable when picked up: synthetic injection that echoes
+a nonce verbatim rejects the tool call.
 
 ## Phase 2 — significant architecture
 

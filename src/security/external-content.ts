@@ -104,6 +104,7 @@ export type ExternalContentSource =
   | "channel_metadata"
   | "web_search"
   | "web_fetch"
+  | "untrusted_zone"
   | "unknown";
 
 const EXTERNAL_SOURCE_LABELS: Record<ExternalContentSource, string> = {
@@ -114,6 +115,7 @@ const EXTERNAL_SOURCE_LABELS: Record<ExternalContentSource, string> = {
   channel_metadata: "Channel metadata",
   web_search: "Web Search",
   web_fetch: "Web Fetch",
+  untrusted_zone: "Untrusted-zone file",
   unknown: "External",
 };
 

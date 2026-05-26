@@ -9,6 +9,7 @@ import { expandHomePrefix, resolveOsHomeDir } from "../infra/home-dir.js";
 import { hasEncodedFileUrlSeparator, trySafeFileURLToPath } from "../infra/local-file-access.js";
 import { detectMime } from "../media/mime.js";
 import { sniffMimeFromBase64 } from "../media/sniff-mime-from-base64.js";
+import { wrapExternalContent } from "../security/external-content.js";
 import type { ImageSanitizationLimits } from "./image-sanitization.js";
 import { toRelativeWorkspacePath } from "./path-policy.js";
 import { wrapEditToolWithRecovery } from "./pi-tools.host-edit.js";
@@ -22,6 +23,7 @@ import type { AnyAgentTool } from "./pi-tools.types.js";
 import { assertSandboxPath } from "./sandbox-paths.js";
 import type { SandboxFsBridge } from "./sandbox/fs-bridge.js";
 import { sanitizeToolResultImages } from "./tool-images.js";
+import { classifyZone } from "./workspace-zones.js";
 
 export {
   REQUIRED_PARAM_GROUPS,
@@ -796,13 +798,41 @@ export function createOpenClawReadTool(
       const filePath = typeof record?.path === "string" ? record.path : "<unknown>";
       const strippedDetailsResult = stripReadTruncationContentDetails(result);
       const normalizedResult = await normalizeReadImageResult(strippedDetailsResult, filePath);
-      return sanitizeToolResultImages(
-        normalizedResult,
-        `read:${filePath}`,
-        options?.imageSanitization,
-      );
+      const zoneWrapped = wrapResultIfFromUntrustedZone(normalizedResult, filePath);
+      return sanitizeToolResultImages(zoneWrapped, `read:${filePath}`, options?.imageSanitization);
     },
   };
+}
+
+// Untrusted-zone reads represent model-generated or externally-fetched
+// content masquerading as a workspace file — wrap so downstream context never
+// treats it as trusted instruction source.
+function wrapResultIfFromUntrustedZone(
+  result: AgentToolResult<unknown>,
+  filePath: string,
+): AgentToolResult<unknown> {
+  if (!filePath || !path.isAbsolute(filePath)) {
+    return result;
+  }
+  if (classifyZone(filePath) !== "untrusted") {
+    return result;
+  }
+  const content = Array.isArray(result.content) ? result.content : [];
+  const nextContent = content.map((block) => {
+    if (
+      block &&
+      typeof block === "object" &&
+      (block as { type?: unknown }).type === "text" &&
+      typeof (block as { text?: unknown }).text === "string"
+    ) {
+      const textBlock = block as TextContentBlock & { text: string };
+      return Object.assign({}, textBlock, {
+        text: wrapExternalContent(textBlock.text, { source: "untrusted_zone" }),
+      }) satisfies TextContentBlock;
+    }
+    return block;
+  });
+  return { ...result, content: nextContent };
 }
 
 function createSandboxReadOperations(params: SandboxToolParams) {

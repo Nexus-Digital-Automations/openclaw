@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  hashPluginFiles,
   hashSkillFile,
   readSkillsLock,
   resolveSkillsLockPath,
@@ -191,5 +192,31 @@ describe("verifyPluginAgainstLock", () => {
       caught = err;
     }
     expect(caught).toBeInstanceOf(SkillsLockVerificationError);
+  });
+});
+
+describe("hashPluginFiles", () => {
+  it("produces an entry map that verifyPluginAgainstLock accepts byte-for-byte", async () => {
+    const pluginRoot = path.join(workspaceDir, "plugin");
+    await mkdir(pluginRoot, { recursive: true });
+    await writeFile(path.join(pluginRoot, "a.md"), "body-a", "utf8");
+    await writeFile(path.join(pluginRoot, "b.md"), "body-b", "utf8");
+    const files = await hashPluginFiles(pluginRoot);
+    const lockPath = path.join(workspaceDir, "skills.lock");
+    await writeSkillsLock(lockPath, {
+      plugins: [{ pluginId: "p1", version: "1.0.0", files }],
+    });
+    const lock = await readSkillsLock(lockPath);
+    await expect(verifyPluginAgainstLock(pluginRoot, "p1", lock!)).resolves.toBeUndefined();
+  });
+
+  it("ignores node_modules and infrastructure files the same way verify does", async () => {
+    const pluginRoot = path.join(workspaceDir, "plugin");
+    await mkdir(path.join(pluginRoot, "node_modules", "dep"), { recursive: true });
+    await writeFile(path.join(pluginRoot, "skill.md"), "body", "utf8");
+    await writeFile(path.join(pluginRoot, "node_modules", "dep", "index.js"), "irrelevant", "utf8");
+    await writeFile(path.join(pluginRoot, ".DS_Store"), "", "utf8");
+    const files = await hashPluginFiles(pluginRoot);
+    expect(Object.keys(files)).toEqual(["skill.md"]);
   });
 });

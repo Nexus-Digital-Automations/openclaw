@@ -198,6 +198,32 @@ export function registerPluginsCli(program: Command) {
     });
 
   plugins
+    .command("lock")
+    .description("Hash installed plugins and write skills.lock for integrity verification")
+    .option("--json", "Print JSON")
+    .option("--file <path>", "Override lockfile path")
+    .action(async (opts: { json?: boolean; file?: string }) => {
+      const { runPluginsLockCommand } = await import("./plugins-integrity-command.js");
+      await runPluginsLockCommand({
+        json: opts.json,
+        ...(opts.file ? { filePath: opts.file } : {}),
+      });
+    });
+
+  plugins
+    .command("verify")
+    .description("Verify installed plugins match skills.lock; exits non-zero on drift")
+    .option("--json", "Print JSON")
+    .option("--file <path>", "Override lockfile path")
+    .action(async (opts: { json?: boolean; file?: string }) => {
+      const { runPluginsVerifyCommand } = await import("./plugins-integrity-command.js");
+      await runPluginsVerifyCommand({
+        json: opts.json,
+        ...(opts.file ? { filePath: opts.file } : {}),
+      });
+    });
+
+  plugins
     .command("build")
     .description("Generate simple tool plugin metadata")
     .option("--root <path>", "Plugin package root")

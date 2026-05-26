@@ -164,6 +164,48 @@ function collectConfiguredRuntimePluginWarnings(params: {
   });
 }
 
+// Tampered plugin code runs as the user — refuse before enable when the lockfile
+// is the only thing standing between disk drift and a privileged hook firing.
+async function assertSkillsLockMatchOrAbort(pluginId: string): Promise<void> {
+  const { readSkillsLock, verifyPluginAgainstLock } =
+    await import("../plugins/skills-lock.runtime.js");
+  const { resolveSkillsLockPath, SkillsLockVerificationError, SkillsLockUnknownPluginError } =
+    await import("../plugins/skills-lock.js");
+  const lockPath = resolveSkillsLockPath({});
+  const lock = await readSkillsLock(lockPath);
+  if (!lock) {
+    return;
+  }
+  const { readPersistedInstalledPluginIndex } =
+    await import("../plugins/installed-plugin-index-store.js");
+  const index = await readPersistedInstalledPluginIndex({});
+  const installPath = index?.installRecords?.[pluginId]?.installPath;
+  if (!installPath) {
+    return;
+  }
+  try {
+    await verifyPluginAgainstLock(installPath, pluginId, lock);
+  } catch (err) {
+    if (err instanceof SkillsLockUnknownPluginError) {
+      defaultRuntime.log(
+        theme.warn(
+          `Plugin "${pluginId}" is not in skills.lock. Run 'openclaw plugins lock' to record its hashes before enabling.`,
+        ),
+      );
+      defaultRuntime.exit(2);
+      return;
+    }
+    if (err instanceof SkillsLockVerificationError) {
+      defaultRuntime.error(
+        theme.warn(`Refusing to enable "${pluginId}": skills.lock drift detected. ${err.message}`),
+      );
+      defaultRuntime.exit(2);
+      return;
+    }
+    throw err;
+  }
+}
+
 export async function runPluginsEnableCommand(id: string): Promise<void> {
   assertConfigWriteAllowedInCurrentMode();
 
@@ -181,6 +223,7 @@ export async function runPluginsEnableCommand(id: string): Promise<void> {
   if (!report.plugins.some((plugin) => matchesPluginId(plugin, id))) {
     return reportMissingPlugin(id);
   }
+  await assertSkillsLockMatchOrAbort(id);
   const enableResult = enablePluginInConfig(cfg, id, {
     updateChannelConfig: false,
   });

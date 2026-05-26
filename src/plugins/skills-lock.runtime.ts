@@ -116,6 +116,26 @@ export async function verifyPluginAgainstLock(
   await assertEveryLockedFileMatches(pluginId, installedPath, entry.files);
 }
 
+/**
+ * Walk an installed plugin root and produce the canonical {path → hash} map
+ * that `writeSkillsLock` consumes. Shared with `verifyPluginAgainstLock` so
+ * the lock and verify paths never disagree on which files are in scope.
+ *
+ * @stable
+ */
+export async function hashPluginFiles(
+  installedPath: string,
+): Promise<Readonly<Record<string, SkillsLockEntry>>> {
+  const relativePaths = await collectPluginFiles(installedPath);
+  const entries: Record<string, SkillsLockEntry> = {};
+  for (const relativePath of [...relativePaths].toSorted()) {
+    const absPath = path.join(installedPath, relativePath);
+    const fileStat = await stat(absPath);
+    entries[relativePath] = { sha256: await hashSkillFile(absPath), size: fileStat.size };
+  }
+  return entries;
+}
+
 function isNodeErrnoException(err: unknown): err is NodeJS.ErrnoException {
   return err instanceof Error && typeof (err as NodeJS.ErrnoException).code === "string";
 }

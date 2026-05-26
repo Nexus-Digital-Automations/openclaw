@@ -126,6 +126,7 @@ export class SkillsLockHashMismatchError extends SkillsLockVerificationError {
 }
 
 export {
+  hashPluginFiles,
   hashSkillFile,
   readSkillsLock,
   verifyPluginAgainstLock,

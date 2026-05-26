@@ -10,6 +10,7 @@ import {
   POSIX_SHELL_WRAPPERS,
   resolveShellWrapperTransportArgv,
 } from "../infra/shell-wrapper-resolution.js";
+import { findArgvExternalContentTaint } from "../shared/process-external-content-bodies.js";
 import { normalizeLowercaseStringOrEmpty } from "../shared/string-coerce.js";
 import {
   DEFAULT_APPROVAL_REQUEST_TIMEOUT_MS,
@@ -298,10 +299,33 @@ async function buildHostApprovalDecisionParams(
   };
 }
 
+// Tool calls whose argv embeds an external-content body are model attempts to
+// inline untrusted input into a shell call — the model is plumbing data the
+// gateway already flagged as external. Force the operator-prompt path even if
+// the bin is on the allowlist, since the allowlist assumes the model wrote the
+// argv on its own initiative.
+function applyExternalContentArgvGate(params: HostExecApprovalParams): HostExecApprovalParams {
+  if (!params.commandArgv || params.commandArgv.length === 0) {
+    return params;
+  }
+  const taintedBody = findArgvExternalContentTaint(params.commandArgv);
+  if (!taintedBody) {
+    return params;
+  }
+  const taintNotice =
+    "External-untrusted content detected in argv — operator approval required regardless of allowlist.";
+  return {
+    ...params,
+    ask: "always",
+    warningText: params.warningText ? `${params.warningText}\n\n${taintNotice}` : taintNotice,
+  };
+}
+
 export async function requestExecApprovalDecisionForHost(
   params: HostExecApprovalParams,
 ): Promise<string | null> {
-  return await requestExecApprovalDecision(await buildHostApprovalDecisionParams(params));
+  const gated = applyExternalContentArgvGate(params);
+  return await requestExecApprovalDecision(await buildHostApprovalDecisionParams(gated));
 }
 
 export async function registerExecApprovalRequestForHost(

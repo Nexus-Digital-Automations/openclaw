@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { recordExternalContentBody } from "../shared/process-external-content-bodies.js";
 export {
   isExternalHookSession,
   mapHookExternalContentSource,
@@ -350,6 +351,9 @@ export function wrapExternalContent(content: string, options: WrapExternalConten
   const { source, sender, subject, includeWarning = true } = options;
 
   const sanitized = sanitizeExternalContentText(content);
+  // Record the post-sanitization body so the exec-approval gate can detect
+  // tool-call arguments that quote external content back at the gateway.
+  recordExternalContentBody(sanitized);
   const sourceLabel = EXTERNAL_SOURCE_LABELS[source] ?? "External";
   const metadataLines: string[] = [`Source: ${sourceLabel}`];
   const sanitizeMetadataValue = (value: string) =>

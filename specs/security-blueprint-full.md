@@ -115,6 +115,14 @@ a nonce verbatim rejects the tool call.
 
 **Acceptance:** integration test toggling the plugin produces the byte-identical snapshot; with plugin enabled, all Phase 1 enforcements engage.
 
+**Hook-surface contract locked.** The three required hook names and their
+mutation/abort result shapes are now guarded by
+`src/plugins/security-sandwich-hook-surface.test.ts`. If pi-agent-core ever
+renames one of `before_prompt_build`, `before_tool_call`, `message_sending`
+or weakens the result types (drops `systemPrompt`/`block`+`blockReason`/
+`cancel`+`cancelReason`+`content`), that test fails and the gap surfaces
+before the plugin gets built. 2.C is no longer blocked on contract unknowns.
+
 ## Phase 3 — architectural-fight items (do anyway per directive)
 
 The plan explicitly recommended against these. User said "all of it." Implementing on best-effort terms; flagging boundaries that require pi-agent-core SDK changes (which OpenClaw does not own — will be vendored or scaffolded in this fork).

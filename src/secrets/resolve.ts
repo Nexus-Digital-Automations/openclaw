@@ -13,6 +13,7 @@ import { formatErrorMessage } from "../infra/errors.js";
 import { FsSafeError, readSecureFile } from "../infra/fs-safe.js";
 import { inspectPathPermissions, safeStat } from "../security/audit-fs.js";
 import { isPathInside } from "../security/scan-paths.js";
+import { recordResolvedSecret } from "../shared/process-secret-literals.js";
 import { resolveUserPath } from "../utils.js";
 import { runTasksWithConcurrency } from "../utils/run-with-concurrency.js";
 import { readJsonPointer } from "./json-pointer.js";
@@ -895,8 +896,14 @@ export async function resolveSecretRefValues(
       // tokens. Recording the exact resolved bytes lets the cache owner pass
       // these literals into redactSensitiveTextWithLiterals so the system masks
       // values it itself decrypted, even when no regex matches.
-      if (options.cache?.resolvedValues && typeof value === "string" && value.length > 0) {
-        options.cache.resolvedValues.add(value);
+      if (typeof value === "string" && value.length > 0) {
+        if (options.cache?.resolvedValues) {
+          options.cache.resolvedValues.add(value);
+        }
+        // Also publish to the process-wide registry so log sinks that do not
+        // own a SecretRefResolveCache (transcript writer, gateway logger,
+        // approval-channel formatter) still mask the decrypted bytes.
+        recordResolvedSecret(value);
       }
     }
   }

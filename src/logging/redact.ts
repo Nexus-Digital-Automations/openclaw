@@ -1,5 +1,6 @@
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { compileConfigRegex } from "../security/config-regex.js";
+import { snapshotResolvedSecrets } from "../shared/process-secret-literals.js";
 import { escapeRegExp } from "../shared/regexp.js";
 import { readLoggingConfig } from "./config.js";
 import { replacePatternBounded } from "./redact-bounded.js";
@@ -206,10 +207,13 @@ export function redactSensitiveText(text: string, options?: RedactOptions): stri
   if (resolved.mode === "off") {
     return text;
   }
-  if (!resolved.patterns.length) {
+  // Process-wide literals capture custom-format secrets the regex defaults miss.
+  // Merging them here means every log sink benefits without per-call wiring.
+  const literalPatterns = compileLiteralPatterns(snapshotResolvedSecrets());
+  if (!resolved.patterns.length && !literalPatterns.length) {
     return text;
   }
-  return redactText(text, resolved.patterns);
+  return redactText(text, [...literalPatterns, ...resolved.patterns]);
 }
 
 // Compiles literals into escaped global regex patterns so they merge with the

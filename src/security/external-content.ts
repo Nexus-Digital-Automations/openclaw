@@ -329,8 +329,21 @@ function replaceLlmSpecialTokenLiterals(content: string): string {
   return output;
 }
 
+// Invisible / format characters that adversaries use to smuggle bytes past
+// substring-aware checks (homoglyphs, zero-width prompt injection, BiDi
+// override attacks). NFKC normalization folds compatibility decompositions
+// first so e.g. fullwidth ASCII collapses to ASCII before the strip pass.
+// Covers: U+200B-200F (ZW spaces + LRM/RLM), U+202A-202E (BiDi overrides),
+// U+2060-2064 (word joiner + invisible operators), U+FEFF (BOM), and the
+// U+E0000-E007F tag-character plane.
+const INVISIBLE_CHAR_REGEX = /[​-‏‪-‮⁠-⁤﻿]|[\u{E0000}-\u{E007F}]/gu;
+
+function stripInvisibleCharacters(content: string): string {
+  return content.normalize("NFKC").replace(INVISIBLE_CHAR_REGEX, "");
+}
+
 function sanitizeExternalContentText(content: string): string {
-  return replaceLlmSpecialTokenLiterals(replaceMarkers(content));
+  return replaceLlmSpecialTokenLiterals(replaceMarkers(stripInvisibleCharacters(content)));
 }
 
 export type WrapExternalContentOptions = {

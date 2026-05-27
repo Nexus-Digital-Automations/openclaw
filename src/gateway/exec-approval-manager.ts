@@ -36,6 +36,12 @@ export type ExecApprovalRecord<TPayload = ExecApprovalRequestPayload> = {
   decision?: ExecApprovalDecision;
   consumedDecision?: ExecApprovalDecision;
   resolvedBy?: string | null;
+  // External-content body literals matched in the tool argv at the time of
+  // approval-request creation. Populated by the before-tool-call canary gate so
+  // an interactive approver can see WHICH external content the model is
+  // forwarding into the exec/bash/write call. Optional so existing callers do
+  // not need updating; absence means no canary scan ran or no body matched.
+  triggeredCanaries?: ReadonlyArray<string>;
 };
 
 type PendingEntry<TPayload = ExecApprovalRequestPayload> = {

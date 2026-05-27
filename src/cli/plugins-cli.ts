@@ -265,6 +265,46 @@ export function registerPluginsCli(program: Command) {
     });
 
   plugins
+    .command("sign")
+    .description("Sign a plugin source tree, writing an openclaw.plugin.sig sidecar")
+    .argument("<plugin-dir>", "Plugin source directory")
+    .requiredOption("--key <path>", "Path to the Ed25519 PRIVATE KEY PEM file")
+    .option("--json", "Print JSON")
+    .action(async (pluginDir: string, opts: { key: string; json?: boolean }) => {
+      const { runPluginsSignCommand } = await import("./plugins-sign-command.js");
+      await runPluginsSignCommand({ pluginDir, keyPath: opts.key, json: opts.json });
+    });
+
+  plugins
+    .command("trust")
+    .description("Add a publisher fingerprint to the known-publishers registry")
+    .requiredOption("--fingerprint <fp>", "32-char hex fingerprint")
+    .requiredOption("--public-key <hex>", "Full hex of the publisher SPKI public key")
+    .option("--file <path>", "Override known-publishers.json path")
+    .option("--json", "Print JSON")
+    .action((opts: { fingerprint: string; publicKey: string; file?: string; json?: boolean }) => {
+      void import("./plugins-sign-command.js").then(({ runPluginsTrustCommand }) =>
+        runPluginsTrustCommand({
+          fingerprint: opts.fingerprint,
+          publicKeyHex: opts.publicKey,
+          ...(opts.file ? { filePath: opts.file } : {}),
+          json: opts.json,
+        }),
+      );
+    });
+
+  plugins
+    .command("generate-key")
+    .description("Generate an Ed25519 keypair for plugin signing")
+    .requiredOption("--out <path>", "Output directory for private.pem and public.pem")
+    .option("--json", "Print JSON")
+    .action((opts: { out: string; json?: boolean }) => {
+      void import("./plugins-sign-command.js").then(({ runPluginsGenerateKeyCommand }) =>
+        runPluginsGenerateKeyCommand({ outDir: opts.out, json: opts.json }),
+      );
+    });
+
+  plugins
     .command("build")
     .description("Generate simple tool plugin metadata")
     .option("--root <path>", "Plugin package root")

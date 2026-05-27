@@ -10,8 +10,17 @@ import { invokeGatewayTool } from "../tools-invoke-shared.js";
 import type { GatewayRequestHandlers } from "./types.js";
 
 function resolveRpcErrorCode(params: {
-  type: "invalid_request" | "not_found" | "tool_call_blocked" | "tool_error";
+  type:
+    | "invalid_request"
+    | "not_found"
+    | "tool_call_blocked"
+    | "tool_error"
+    | "verified_cmd_failure";
   requiresApproval?: boolean;
+  // P1.1 fine-grained code from invokeGatewayTool (verified_cmd.*); when
+  // present we surface it directly so callers can distinguish missing nonce
+  // from chain break.
+  code?: string;
 }): string {
   if (params.requiresApproval) {
     return "requires_approval";
@@ -25,6 +34,8 @@ function resolveRpcErrorCode(params: {
       return "forbidden";
     case "tool_error":
       return "internal_error";
+    case "verified_cmd_failure":
+      return params.code ?? "forbidden";
   }
   return "internal_error";
 }

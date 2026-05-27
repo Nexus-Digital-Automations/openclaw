@@ -42,6 +42,11 @@ export type ExecApprovalRecord<TPayload = ExecApprovalRequestPayload> = {
   // forwarding into the exec/bash/write call. Optional so existing callers do
   // not need updating; absence means no canary scan ran or no body matched.
   triggeredCanaries?: ReadonlyArray<string>;
+  // P1.1 verified-cmd envelope nonce. Set when an approval-flow tool was
+  // dispatched under verified-cmd mode so the audit trail can correlate the
+  // approval record with the envelope's unguessable identifier. Optional;
+  // legacy approval paths leave it undefined.
+  nonce?: string;
 };
 
 type PendingEntry<TPayload = ExecApprovalRequestPayload> = {

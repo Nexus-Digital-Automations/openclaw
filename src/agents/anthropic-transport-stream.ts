@@ -11,6 +11,12 @@ import {
 } from "@earendil-works/pi-ai";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { createOutputFirewall, snapshotFirewallInputs } from "../security/output-firewall.js";
+import {
+  GENESIS_PREV_HASH,
+  envelopeHash,
+  mintEnvelope,
+  type VerifiedCmdEnvelope,
+} from "../security/verified-cmd.js";
 import { MALFORMED_STREAMING_FRAGMENT_ERROR_MESSAGE } from "../shared/assistant-error-format.js";
 import { normalizeLowercaseStringOrEmpty } from "../shared/string-coerce.js";
 import {
@@ -92,6 +98,10 @@ type TransportContentBlock =
       arguments: unknown;
       partialJson?: string;
       index?: number;
+      // P1.1 verified-cmd envelope minted at extraction time. Dispatch refuses
+      // tool calls whose envelope does not chain-verify; absence is also a
+      // refusal. Turn-scoped, non-persisted, never exposed to the model.
+      verifiedCmd?: VerifiedCmdEnvelope;
     };
 
 type MutableAssistantOutput = {
@@ -970,6 +980,10 @@ export function createAnthropicMessagesTransportStreamFn(): StreamFn {
         // the whole turn so no tool call is dispatched once a leak is seen.
         const turnFirewall = createOutputFirewall(snapshotFirewallInputs());
         let firewallTripped = false;
+        // P1.1 verified-cmd chain head. Tracks the SHA-256 of the last
+        // envelope minted in this turn so each subsequent envelope's prevHash
+        // links to it. Reset per turn (this closure is per-stream).
+        let verifiedCmdChainHead = GENESIS_PREV_HASH;
         const tripFirewall = (
           family: string,
           literalLength: number,
@@ -1390,6 +1404,15 @@ export function createAnthropicMessagesTransportStreamFn(): StreamFn {
                 block.arguments = parseAnthropicToolCallArguments(block.partialJson);
               }
               delete block.partialJson;
+              // P1.1: mint envelope once args are finalized. Chain head moves
+              // forward only on successful mint, preserving turn order.
+              const envelope = mintEnvelope(
+                { name: block.name, args: block.arguments },
+                "model",
+                verifiedCmdChainHead,
+              );
+              block.verifiedCmd = envelope;
+              verifiedCmdChainHead = envelopeHash(envelope);
               stream.push({
                 type: "toolcall_end",
                 contentIndex: index,

@@ -3,6 +3,10 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  clearResolvedSecretsForTests,
+  recordResolvedSecret,
+} from "../shared/process-secret-literals.js";
+import {
   getDefaultRedactPatterns,
   redactSecrets,
   redactSensitiveFieldValue,
@@ -567,6 +571,34 @@ describe("redactSecrets", () => {
     expect(serialized).not.toContain("1//0fake-refresh-token");
     expect(serialized).not.toContain("opaque-access-token-value");
     expect(serialized).not.toContain("opaque-refresh-token-value");
+  });
+});
+
+describe("redactSecrets with process-wide session secret registry", () => {
+  afterEach(() => {
+    clearResolvedSecretsForTests();
+  });
+
+  it("masks a custom-format secret in a tool-output payload via the session registry", () => {
+    // Mimics src/secrets/resolve.ts recording a decrypted value the regex
+    // defaults could never match (no known prefix, mixed punctuation).
+    const sessionSecret = "weird~format!secret@value#42";
+    recordResolvedSecret(sessionSecret);
+    const toolOutput = {
+      result: `provider returned ${sessionSecret} downstream`,
+      nested: { detail: sessionSecret },
+    };
+    const redacted = redactSecrets(toolOutput);
+    const serialized = JSON.stringify(redacted);
+    expect(serialized).not.toContain(sessionSecret);
+  });
+
+  it("masks the same secret in a flat log line via redactSensitiveText", () => {
+    const sessionSecret = "weird~format!secret@value#42";
+    recordResolvedSecret(sessionSecret);
+    const masked = redactSensitiveText(`log says ${sessionSecret} done`);
+    expect(masked).not.toContain(sessionSecret);
+    expect(masked).toContain("log says");
   });
 });
 

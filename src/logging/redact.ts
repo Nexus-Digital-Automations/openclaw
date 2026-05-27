@@ -409,9 +409,10 @@ function redactStructuredSecretValue(
 }
 
 export function redactSecrets<T>(value: T): T {
-  const options = resolveToolPayloadRedaction();
+  const baseOptions = resolveToolPayloadRedaction();
   if (typeof value === "string") {
-    return redactSensitiveText(value, options) as T;
+    // redactSensitiveText already merges snapshotResolvedSecrets() literals.
+    return redactSensitiveText(value, baseOptions) as T;
   }
   if (value === null || value === undefined) {
     return value;
@@ -419,7 +420,18 @@ export function redactSecrets<T>(value: T): T {
   if (typeof value !== "object") {
     return value;
   }
-  return redactStructuredSecretValue("", value, new WeakSet<object>(), options) as T;
+  // Structured path bypasses redactSensitiveText's per-call registry merge, so
+  // splice the process-wide secret literals into options.patterns here. Without
+  // this, a custom-format token embedded in a tool-output field would survive
+  // the regex-only sweep and reach the model.
+  const literalPatterns = compileLiteralPatterns(snapshotResolvedSecrets());
+  const mergedOptions: RedactOptions = literalPatterns.length
+    ? {
+        mode: baseOptions.mode,
+        patterns: [...literalPatterns, ...resolvePatterns(baseOptions.patterns)],
+      }
+    : baseOptions;
+  return redactStructuredSecretValue("", value, new WeakSet<object>(), mergedOptions) as T;
 }
 
 export function getDefaultRedactPatterns(): string[] {

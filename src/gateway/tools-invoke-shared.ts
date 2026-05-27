@@ -9,6 +9,7 @@ import { logWarn } from "../logger.js";
 import { isTestDefaultMemorySlotDisabled } from "../plugins/config-state.js";
 import { defaultSlotIdForKey } from "../plugins/slots.js";
 import { getPluginToolMeta } from "../plugins/tools.js";
+import { tryAppendAuditEntry } from "../security/audit-chain.js";
 import {
   normalizeOptionalLowercaseString,
   normalizeOptionalString,
@@ -269,12 +270,18 @@ export async function invokeGatewayTool(params: {
         },
       };
     }
+    const executionResult = await gatewayTool.execute?.(toolCallId, hookResult.params);
+    tryAppendAuditEntry({
+      entryId: toolCallId,
+      toolName,
+      argv: hookResult.params,
+    });
     return {
       ok: true,
       status: 200,
       toolName,
       source: resolveToolSource(gatewayTool),
-      result: await gatewayTool.execute?.(toolCallId, hookResult.params),
+      result: executionResult,
     };
   } catch (err) {
     const inputStatus = resolveToolInputErrorStatus(err);

@@ -10,6 +10,7 @@ import {
   type ThinkingLevel,
 } from "@earendil-works/pi-ai";
 import { createSubsystemLogger } from "../logging/subsystem.js";
+import { createOutputFirewall, snapshotFirewallInputs } from "../security/output-firewall.js";
 import { MALFORMED_STREAMING_FRAGMENT_ERROR_MESSAGE } from "../shared/assistant-error-format.js";
 import { normalizeLowercaseStringOrEmpty } from "../shared/string-coerce.js";
 import {
@@ -964,7 +965,38 @@ export function createAnthropicMessagesTransportStreamFn(): StreamFn {
         const eventIndexKey = (eventIndex: unknown) =>
           typeof eventIndex === "number" ? eventIndex : -1;
         let firewallState = createOutputFirewallState();
+        // Turn-level AC firewall: distinct from the per-delta sanitizer above.
+        // The sanitizer rewrites sensitive bytes in transit; this gate trips
+        // the whole turn so no tool call is dispatched once a leak is seen.
+        const turnFirewall = createOutputFirewall(snapshotFirewallInputs());
+        let firewallTripped = false;
+        const tripFirewall = (
+          family: string,
+          literalLength: number,
+          offset: number,
+          source: "text" | "thinking",
+        ): void => {
+          firewallTripped = true;
+          output.stopReason = "error";
+          log.warn(`[output-firewall] turn aborted: ${source} chunk echoed sensitive literal`, {
+            event: "output_firewall.trip",
+            family,
+            literal: "<redacted>",
+            literal_length: literalLength,
+            offset,
+          });
+        };
+        const scanForTurnTrip = (chunk: string, source: "text" | "thinking"): void => {
+          if (firewallTripped || chunk.length === 0) {
+            return;
+          }
+          const trip = turnFirewall.scan(chunk);
+          if (trip !== null) {
+            tripFirewall(trip.family, trip.literal.length, trip.offset, source);
+          }
+        };
         const firewallTextDelta = (raw: string): string => {
+          scanForTurnTrip(raw, "text");
           const verdict = scanOutputChunk(raw, firewallState);
           firewallState = verdict.nextState;
           if (verdict.kind !== "block") {
@@ -1182,6 +1214,18 @@ export function createAnthropicMessagesTransportStreamFn(): StreamFn {
               continue;
             }
             if (contentBlock?.type === "tool_use") {
+              // Firewall trip means a sensitive literal was already echoed in
+              // this turn's text; suppress tool dispatch so the tool path
+              // cannot act on the leaked context. The turn ends with
+              // stopReason="error" and no toolcall_{start,delta,end} events.
+              if (firewallTripped) {
+                log.warn("[output-firewall] suppressing Anthropic tool_use after firewall trip", {
+                  event: "output_firewall.tool_suppressed",
+                  tool_name:
+                    typeof contentBlock.name === "string" ? contentBlock.name : "<unknown>",
+                });
+                continue;
+              }
               const block: TransportContentBlock = {
                 type: "toolCall",
                 id: typeof contentBlock.id === "string" ? contentBlock.id : "",

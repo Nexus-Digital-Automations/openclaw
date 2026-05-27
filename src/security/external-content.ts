@@ -1,5 +1,48 @@
 import { randomBytes } from "node:crypto";
-import { recordExternalContentBody } from "../shared/process-external-content-bodies.js";
+import {
+  recordExternalContentBody,
+  snapshotExternalContentBodies,
+} from "../shared/process-external-content-bodies.js";
+
+// `OPENCLAW_CANARY_` is the literal prefix emitted by `createExternalContentCanary`.
+// The output firewall scans canary echoes as a distinct family from generic
+// marker bodies so an echo of either is logged with the right provenance, even
+// though both share one storage Set for taint-propagation purposes.
+const EXTERNAL_CONTENT_CANARY_PREFIX = "OPENCLAW_CANARY_";
+
+/**
+ * Snapshot only the per-wrap canary literals from the external-content
+ * registry. The output firewall reports echoes of these under family
+ * `"canary"` to distinguish them from generic wrapped-body echoes.
+ *
+ * @stable
+ */
+export function snapshotExternalContentCanaries(): readonly string[] {
+  const out: string[] = [];
+  for (const body of snapshotExternalContentBodies()) {
+    if (body.startsWith(EXTERNAL_CONTENT_CANARY_PREFIX)) {
+      out.push(body);
+    }
+  }
+  return out;
+}
+
+/**
+ * Snapshot every non-canary body the gateway has wrapped this process. These
+ * are the actual external-content payloads; an echo back from the model
+ * means the model is leaking wrapped untrusted content into its own output.
+ *
+ * @stable
+ */
+export function snapshotExternalContentMarkerBodies(): readonly string[] {
+  const out: string[] = [];
+  for (const body of snapshotExternalContentBodies()) {
+    if (!body.startsWith(EXTERNAL_CONTENT_CANARY_PREFIX)) {
+      out.push(body);
+    }
+  }
+  return out;
+}
 export {
   isExternalHookSession,
   mapHookExternalContentSource,

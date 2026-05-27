@@ -50,6 +50,12 @@ export type PluginAuthoringInitOptions = {
   name?: string;
 };
 
+// commander coerces repeatable --root flags through this accumulator so each
+// occurrence appends to the prior list rather than overwriting it.
+function collectRepeatable(value: string, previous: string[]): string[] {
+  return [...previous, value];
+}
+
 export function registerPluginsCli(program: Command) {
   const plugins = program
     .command("plugins")
@@ -220,6 +226,41 @@ export function registerPluginsCli(program: Command) {
       await runPluginsVerifyCommand({
         json: opts.json,
         ...(opts.file ? { filePath: opts.file } : {}),
+      });
+    });
+
+  plugins
+    .command("source-lock")
+    .description(
+      "Hash plugin SOURCE trees (extensions/ + external --root paths) and write plugins.lock",
+    )
+    .option("--json", "Print JSON")
+    .option("--file <path>", "Override plugins.lock path")
+    .option("--root <path>", "Explicit plugin source root (repeatable)", collectRepeatable, [])
+    .option("--dry-run", "Print the would-be lockfile to stdout without writing", false)
+    .action(async (opts: { json?: boolean; file?: string; root?: string[]; dryRun?: boolean }) => {
+      const { runPluginsSourceLockCommand } = await import("./plugins-source-integrity-command.js");
+      await runPluginsSourceLockCommand({
+        json: opts.json,
+        dryRun: opts.dryRun,
+        ...(opts.file ? { filePath: opts.file } : {}),
+        ...(opts.root && opts.root.length > 0 ? { roots: opts.root } : {}),
+      });
+    });
+
+  plugins
+    .command("source-verify")
+    .description("Verify plugin SOURCE trees match plugins.lock; exits non-zero on drift")
+    .option("--json", "Print JSON")
+    .option("--file <path>", "Override plugins.lock path")
+    .option("--root <path>", "Explicit plugin source root (repeatable)", collectRepeatable, [])
+    .action(async (opts: { json?: boolean; file?: string; root?: string[] }) => {
+      const { runPluginsSourceVerifyCommand } =
+        await import("./plugins-source-integrity-command.js");
+      await runPluginsSourceVerifyCommand({
+        json: opts.json,
+        ...(opts.file ? { filePath: opts.file } : {}),
+        ...(opts.root && opts.root.length > 0 ? { roots: opts.root } : {}),
       });
     });
 

@@ -1788,5 +1788,122 @@ describe("google transport stream", () => {
       expect(textBlock?.text).toBeDefined();
       expect(textBlock?.text).not.toContain(secret);
     });
+
+    it("aborts the turn with stopReason=error when a Gemini text part echoes a secret", async () => {
+      const secret = "sk-not-a-real-format-firewall-google-trip-aaaa";
+      const { recordResolvedSecret } =
+        await import("openclaw/plugin-sdk/provider-transport-runtime");
+      recordResolvedSecret(secret);
+      guardedFetchMock.mockResolvedValueOnce(
+        buildSseResponse([
+          {
+            candidates: [
+              {
+                content: { parts: [{ text: `here is the key ${secret} value` }] },
+                finishReason: "STOP",
+              },
+            ],
+            usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 8, totalTokenCount: 9 },
+          },
+        ]),
+      );
+      const streamFn = createGoogleGenerativeAiTransportStreamFn();
+      const handle = await Promise.resolve(
+        streamFn(
+          buildGeminiModel(),
+          {
+            systemPrompt: "Be safe.",
+            messages: [{ role: "user", content: "leak", timestamp: 0 }],
+          } as never,
+          { apiKey: "gemini-api-key" } as never,
+        ),
+      );
+      // Drain
+      for await (const _event of handle as AsyncIterable<unknown>) {
+        void _event;
+      }
+      const result = await handle.result();
+      expect(result.stopReason).toBe("error");
+    });
+
+    it("suppresses Gemini functionCall after a firewall trip and emits no toolCall block", async () => {
+      const secret = "sk-not-a-real-format-firewall-google-tool-bbbb";
+      const { recordResolvedSecret } =
+        await import("openclaw/plugin-sdk/provider-transport-runtime");
+      recordResolvedSecret(secret);
+      guardedFetchMock.mockResolvedValueOnce(
+        buildSseResponse([
+          {
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    { text: `leaking ${secret} now` },
+                    { functionCall: { name: "lookup", args: { q: "x" } } },
+                  ],
+                },
+                finishReason: "STOP",
+              },
+            ],
+            usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 8, totalTokenCount: 9 },
+          },
+        ]),
+      );
+      const streamFn = createGoogleGenerativeAiTransportStreamFn();
+      const handle = await Promise.resolve(
+        streamFn(
+          buildGeminiModel(),
+          {
+            systemPrompt: "Be safe.",
+            messages: [{ role: "user", content: "leak", timestamp: 0 }],
+          } as never,
+          { apiKey: "gemini-api-key" } as never,
+        ),
+      );
+      const events: { type?: string }[] = [];
+      for await (const event of handle as AsyncIterable<{ type?: string }>) {
+        events.push(event);
+      }
+      const result = await handle.result();
+      expect(result.stopReason).toBe("error");
+      expect(events.some((event) => event.type === "toolcall_start")).toBe(false);
+      expect(events.some((event) => event.type === "toolcall_end")).toBe(false);
+      expect(result.content.some((block) => block.type === "toolCall")).toBe(false);
+    });
+
+    it("leaves a clean Gemini stream untouched (no trip, stopReason=stop)", async () => {
+      const { recordResolvedSecret } =
+        await import("openclaw/plugin-sdk/provider-transport-runtime");
+      recordResolvedSecret("sk-not-a-real-format-google-unused-secret-cccc");
+      guardedFetchMock.mockResolvedValueOnce(
+        buildSseResponse([
+          {
+            candidates: [
+              {
+                content: { parts: [{ text: "all clean output here" }] },
+                finishReason: "STOP",
+              },
+            ],
+            usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 4, totalTokenCount: 5 },
+          },
+        ]),
+      );
+      const streamFn = createGoogleGenerativeAiTransportStreamFn();
+      const handle = await Promise.resolve(
+        streamFn(
+          buildGeminiModel(),
+          {
+            systemPrompt: "Be safe.",
+            messages: [{ role: "user", content: "clean", timestamp: 0 }],
+          } as never,
+          { apiKey: "gemini-api-key" } as never,
+        ),
+      );
+      for await (const _event of handle as AsyncIterable<unknown>) {
+        void _event;
+      }
+      const result = await handle.result();
+      expect(result.stopReason).toBe("stop");
+    });
   });
 });

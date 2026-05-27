@@ -7,6 +7,14 @@ export {
   type OutputFirewallVerdict,
 } from "../agents/output-firewall.js";
 export {
+  createOutputFirewall,
+  snapshotFirewallInputs,
+  type FirewallFamily,
+  type FirewallTrip,
+  type OutputFirewall,
+  type OutputFirewallInputs,
+} from "../security/output-firewall.js";
+export {
   clearResolvedSecretsForTests,
   recordResolvedSecret,
 } from "../shared/process-secret-literals.js";

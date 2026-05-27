@@ -13,6 +13,7 @@ import {
   buildGuardedModelFetch,
   coerceTransportToolCallArguments,
   createEmptyTransportUsage,
+  createOutputFirewall,
   createOutputFirewallState,
   createWritableTransportEventStream,
   failTransportStream,
@@ -20,6 +21,7 @@ import {
   mergeTransportHeaders,
   sanitizeTransportPayloadText,
   scanOutputChunk,
+  snapshotFirewallInputs,
   stripSystemPromptCacheBoundary,
   transformTransportMessages,
   type WritableTransportStream,
@@ -1231,7 +1233,36 @@ function createGoogleTransportStreamFn(kind: CanonicalGoogleTransportApi): Strea
         });
         stream.push({ type: "start", partial: output as never });
         let firewallState = createOutputFirewallState();
+        // Turn-level AC firewall: trips the whole turn so functionCall parts
+        // cannot dispatch tool calls once a sensitive literal is echoed.
+        const turnFirewall = createOutputFirewall(snapshotFirewallInputs());
+        let firewallTripped = false;
+        const tripGoogleFirewall = (
+          family: string,
+          literalLength: number,
+          offset: number,
+        ): void => {
+          firewallTripped = true;
+          output.stopReason = "error";
+          log.warn(`[output-firewall] turn aborted: Google text echoed sensitive literal`, {
+            event: "output_firewall.trip",
+            family,
+            literal: "<redacted>",
+            literal_length: literalLength,
+            offset,
+          });
+        };
+        const scanGoogleTextForTurnTrip = (chunk: string): void => {
+          if (firewallTripped || chunk.length === 0) {
+            return;
+          }
+          const trip = turnFirewall.scan(chunk);
+          if (trip !== null) {
+            tripGoogleFirewall(trip.family, trip.literal.length, trip.offset);
+          }
+        };
         const firewallTextDelta = (raw: string): string => {
+          scanGoogleTextForTurnTrip(raw);
           const verdict = scanOutputChunk(raw, firewallState);
           firewallState = verdict.nextState;
           if (verdict.kind !== "block") {
@@ -1331,6 +1362,19 @@ function createGoogleTransportStreamFn(kind: CanonicalGoogleTransportApi): Strea
                 }
               }
               if (part.functionCall) {
+                if (firewallTripped) {
+                  // Sensitive literal already echoed this turn; refuse to
+                  // emit functionCall so the tool path cannot act on leaked
+                  // context.
+                  log.warn(
+                    "[output-firewall] suppressing Google functionCall after firewall trip",
+                    {
+                      event: "output_firewall.tool_suppressed",
+                      tool_name: part.functionCall.name ?? "<unknown>",
+                    },
+                  );
+                  continue;
+                }
                 if (currentBlockIndex >= 0) {
                   pushTextBlockEnd(stream, output, currentBlockIndex);
                   currentBlockIndex = -1;
@@ -1384,7 +1428,7 @@ function createGoogleTransportStreamFn(kind: CanonicalGoogleTransportApi): Strea
               }
             }
           }
-          if (typeof candidate?.finishReason === "string") {
+          if (typeof candidate?.finishReason === "string" && !firewallTripped) {
             output.stopReason = mapStopReasonString(candidate.finishReason);
             if (output.content.some((block) => block.type === "toolCall")) {
               output.stopReason = "toolUse";

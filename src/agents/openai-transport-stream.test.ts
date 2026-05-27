@@ -1,6 +1,10 @@
 import { createServer } from "node:http";
 import type { Model } from "@earendil-works/pi-ai";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  clearResolvedSecretsForTests,
+  recordResolvedSecret,
+} from "../shared/process-secret-literals.js";
 import {
   buildOpenAIResponsesParams,
   buildOpenAICompletionsParams,
@@ -7064,6 +7068,198 @@ describe("openai transport stream", () => {
     await expect(
       testing.processOpenAICompletionsStream(mockStream(), output, model, stream),
     ).rejects.toThrow("Exceeded tool-call argument buffer limit");
+  });
+
+  describe("output firewall — AC turn-trip parity with Anthropic", () => {
+    beforeEach(() => {
+      clearResolvedSecretsForTests();
+    });
+    afterEach(() => {
+      clearResolvedSecretsForTests();
+    });
+
+    function buildCompletionsModel(): Model<"openai-completions"> {
+      return {
+        id: "gpt-5.5",
+        name: "GPT-5.5",
+        api: "openai-completions",
+        provider: "openai",
+        baseUrl: "https://api.openai.com/v1",
+        reasoning: false,
+        input: ["text"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 200_000,
+        maxTokens: 8192,
+      };
+    }
+
+    it("aborts a Responses turn with stopReason=error when text delta echoes a secret", async () => {
+      const secret = "sk-not-a-real-format-firewall-openai-responses-7777";
+      recordResolvedSecret(secret);
+      const model = createAzureResponsesModel();
+      const output = createResponsesAssistantOutput(model);
+      const stream = { push: vi.fn() };
+
+      async function* mockStream() {
+        yield { type: "response.output_item.added", item: { type: "message" } };
+        yield {
+          type: "response.output_text.delta",
+          delta: `here is the key ${secret} value`,
+        };
+        yield { type: "response.completed", response: { status: "completed", usage: {} } };
+      }
+
+      await testing.processResponsesStream(mockStream(), output, stream, model);
+
+      expect(output.stopReason).toBe("error");
+    });
+
+    it("suppresses Responses tool_use after a firewall trip and emits no toolcall events", async () => {
+      const secret = "sk-not-a-real-format-firewall-openai-responses-tool-8888";
+      recordResolvedSecret(secret);
+      const model = createAzureResponsesModel();
+      const output = createResponsesAssistantOutput(model);
+      const events: { type?: string }[] = [];
+      const stream = { push: (event: unknown) => events.push(event as { type?: string }) };
+
+      async function* mockStream() {
+        yield { type: "response.output_item.added", item: { type: "message" } };
+        yield {
+          type: "response.output_text.delta",
+          delta: `leaking ${secret} now`,
+        };
+        yield {
+          type: "response.output_item.added",
+          item: {
+            type: "function_call",
+            id: "call_1",
+            call_id: "c1",
+            name: "lookup",
+            arguments: "",
+          },
+        };
+        yield { type: "response.function_call_arguments.delta", delta: '{"q":"x"}' };
+        yield {
+          type: "response.output_item.done",
+          item: {
+            type: "function_call",
+            id: "call_1",
+            call_id: "c1",
+            name: "lookup",
+            arguments: '{"q":"x"}',
+          },
+        };
+        yield { type: "response.completed", response: { status: "completed", usage: {} } };
+      }
+
+      await testing.processResponsesStream(mockStream(), output, stream, model);
+
+      expect(output.stopReason).toBe("error");
+      expect(events.some((event) => event.type === "toolcall_start")).toBe(false);
+      expect(events.some((event) => event.type === "toolcall_end")).toBe(false);
+      expect(output.content.some((block) => block.type === "toolCall")).toBe(false);
+    });
+
+    it("aborts a Completions turn with stopReason=error when visible text echoes a secret", async () => {
+      const secret = "sk-not-a-real-format-firewall-openai-completions-1234";
+      recordResolvedSecret(secret);
+      const model = buildCompletionsModel();
+      const output = createAssistantOutput(model);
+      const stream = { push: vi.fn() };
+
+      async function* mockStream() {
+        yield {
+          id: "chatcmpl-fw",
+          object: "chat.completion.chunk" as const,
+          created: 1,
+          model: model.id,
+          choices: [
+            {
+              index: 0,
+              delta: { role: "assistant" as const, content: `here is ${secret} value` },
+              logprobs: null,
+              finish_reason: "stop" as const,
+            },
+          ],
+        };
+      }
+
+      await testing.processOpenAICompletionsStream(mockStream(), output, model, stream);
+
+      expect(output.stopReason).toBe("error");
+    });
+
+    it("suppresses Completions tool_calls after a firewall trip", async () => {
+      const secret = "sk-not-a-real-format-firewall-openai-completions-tool-5555";
+      recordResolvedSecret(secret);
+      const model = buildCompletionsModel();
+      const output = createAssistantOutput(model);
+      const events: { type?: string }[] = [];
+      const stream = { push: (event: unknown) => events.push(event as { type?: string }) };
+
+      async function* mockStream() {
+        yield {
+          id: "chatcmpl-fw-tool-pre",
+          object: "chat.completion.chunk" as const,
+          created: 1,
+          model: model.id,
+          choices: [
+            {
+              index: 0,
+              delta: { role: "assistant" as const, content: `leak ${secret}` },
+              logprobs: null,
+              finish_reason: null,
+            },
+          ],
+        };
+        yield {
+          id: "chatcmpl-fw-tool",
+          object: "chat.completion.chunk" as const,
+          created: 1,
+          model: model.id,
+          choices: [
+            {
+              index: 0,
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: "call_1",
+                    type: "function" as const,
+                    function: { name: "lookup", arguments: '{"q":"x"}' },
+                  },
+                ],
+              } as Record<string, unknown>,
+              logprobs: null,
+              finish_reason: "tool_calls" as const,
+            },
+          ],
+        };
+      }
+
+      await testing.processOpenAICompletionsStream(mockStream(), output, model, stream);
+
+      expect(output.stopReason).toBe("error");
+      expect(events.some((event) => event.type === "toolcall_start")).toBe(false);
+      expect(output.content.some((block) => block.type === "toolCall")).toBe(false);
+    });
+
+    it("leaves a clean Responses stream untouched (no trip, stopReason=stop)", async () => {
+      recordResolvedSecret("sk-not-a-real-format-unused-secret-aaaa");
+      const model = createAzureResponsesModel();
+      const output = createResponsesAssistantOutput(model);
+      const stream = { push: vi.fn() };
+
+      async function* mockStream() {
+        yield { type: "response.output_item.added", item: { type: "message" } };
+        yield { type: "response.output_text.delta", delta: "all clean output here" };
+        yield { type: "response.completed", response: { status: "completed", usage: {} } };
+      }
+
+      await testing.processResponsesStream(mockStream(), output, stream, model);
+
+      expect(output.stopReason).toBe("stop");
+    });
   });
 });
 

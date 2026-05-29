@@ -30,6 +30,11 @@ import { createSubsystemLogger } from "../logging/subsystem.js";
 import type { ProviderRuntimeModel } from "../plugins/provider-runtime-model.types.js";
 import { resolveProviderTransportTurnStateWithPlugin } from "../plugins/provider-runtime.js";
 import { createOutputFirewall, snapshotFirewallInputs } from "../security/output-firewall.js";
+import {
+  envelopeHash,
+  GENESIS_PREV_HASH,
+  mintEnvelope,
+} from "../security/verified-cmd.js";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./copilot-dynamic-headers.js";
 import { createDeepSeekTextFilter } from "./deepseek-text-filter.js";
 import { resolveMaxTokensParam } from "./model-max-tokens-params.js";
@@ -1387,6 +1392,9 @@ async function processResponsesStream(
   // whole turn so no tool call is dispatched once a leak is seen.
   const turnFirewall = createOutputFirewall(snapshotFirewallInputs());
   let firewallTripped = false;
+  // P1.1 verified-cmd chain head, turn-scoped per verified-cmd.ts invariant.
+  // Each minted envelope's hash becomes the next envelope's prevHash.
+  let verifiedCmdChainHead = GENESIS_PREV_HASH;
   const tripResponsesFirewall = (family: string, literalLength: number, offset: number): void => {
     firewallTripped = true;
     output.stopReason = "error";
@@ -1571,15 +1579,25 @@ async function processResponsesStream(
           currentBlock?.type === "toolCall" && currentBlock.partialJson
             ? parseStreamingJson(stringifyJsonLike(currentBlock.partialJson, "{}"))
             : parseStreamingJson(stringifyJsonLike(item.arguments, "{}"));
+        const toolName = stringifyUnknown(item.name);
+        // P1.1: mint envelope once args are finalized. Chain head moves
+        // forward only on successful mint, preserving turn order.
+        const envelope = mintEnvelope({ name: toolName, args }, "model", verifiedCmdChainHead);
+        verifiedCmdChainHead = envelopeHash(envelope);
+        const finalizedToolCall = {
+          type: "toolCall",
+          id: `${stringifyUnknown(item.call_id)}|${stringifyUnknown(item.id)}`,
+          name: toolName,
+          arguments: args,
+          verifiedCmd: envelope,
+        };
+        if (currentBlock?.type === "toolCall") {
+          currentBlock.verifiedCmd = envelope;
+        }
         stream.push({
           type: "toolcall_end",
           contentIndex: blockIndex(),
-          toolCall: {
-            type: "toolCall",
-            id: `${stringifyUnknown(item.call_id)}|${stringifyUnknown(item.id)}`,
-            name: stringifyUnknown(item.name),
-            arguments: args,
-          },
+          toolCall: finalizedToolCall,
           partial: output,
         });
         currentBlock = null;

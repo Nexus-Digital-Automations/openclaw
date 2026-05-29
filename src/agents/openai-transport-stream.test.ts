@@ -7070,6 +7070,73 @@ describe("openai transport stream", () => {
     ).rejects.toThrow("Exceeded tool-call argument buffer limit");
   });
 
+  it("mints chained verified-cmd envelopes across two Responses tool calls in a turn", async () => {
+    const { envelopeHash, GENESIS_PREV_HASH } = await import("../security/verified-cmd.js");
+    const model = createAzureResponsesModel();
+    const output = createResponsesAssistantOutput(model);
+    const events: Array<Record<string, unknown>> = [];
+    const stream = { push: (event: unknown) => events.push(event as Record<string, unknown>) };
+
+    async function* mockStream() {
+      yield {
+        type: "response.output_item.added",
+        item: { type: "function_call", id: "fc_a", call_id: "ca_a", name: "read", arguments: "" },
+      };
+      yield { type: "response.function_call_arguments.delta", delta: '{"path":"/a"}' };
+      yield {
+        type: "response.output_item.done",
+        item: {
+          type: "function_call",
+          id: "fc_a",
+          call_id: "ca_a",
+          name: "read",
+          arguments: '{"path":"/a"}',
+        },
+      };
+      yield {
+        type: "response.output_item.added",
+        item: { type: "function_call", id: "fc_b", call_id: "ca_b", name: "read", arguments: "" },
+      };
+      yield { type: "response.function_call_arguments.delta", delta: '{"path":"/b"}' };
+      yield {
+        type: "response.output_item.done",
+        item: {
+          type: "function_call",
+          id: "fc_b",
+          call_id: "ca_b",
+          name: "read",
+          arguments: '{"path":"/b"}',
+        },
+      };
+      yield { type: "response.completed", response: { status: "completed", usage: {} } };
+    }
+
+    await testing.processResponsesStream(mockStream(), output, stream, model);
+
+    const ends = events.filter((event) => event.type === "toolcall_end");
+    expect(ends).toHaveLength(2);
+    const readEnvelope = (event: Record<string, unknown>): Record<string, unknown> => {
+      const toolCall = event.toolCall;
+      if (!toolCall || typeof toolCall !== "object") {
+        throw new Error("toolcall_end event missing toolCall");
+      }
+      const envelope = (toolCall as Record<string, unknown>).verifiedCmd;
+      if (!envelope || typeof envelope !== "object") {
+        throw new Error("toolcall_end toolCall missing verifiedCmd envelope");
+      }
+      return envelope as Record<string, unknown>;
+    };
+    const firstEnv = readEnvelope(ends[0]);
+    const secondEnv = readEnvelope(ends[1]);
+    expect(firstEnv.prevHash).toBe(GENESIS_PREV_HASH);
+    expect(firstEnv.provenance).toBe("model");
+    expect(firstEnv.nonce).toHaveLength(64);
+    expect(secondEnv.prevHash).toBe(
+      envelopeHash(firstEnv as unknown as Parameters<typeof envelopeHash>[0]),
+    );
+    expect(secondEnv.nonce).not.toBe(firstEnv.nonce);
+  });
+
   describe("output firewall — AC turn-trip parity with Anthropic", () => {
     beforeEach(() => {
       clearResolvedSecretsForTests();

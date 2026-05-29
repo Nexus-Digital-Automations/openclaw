@@ -73,7 +73,12 @@ const DEFAULT_MODEL_ACCURATE = "claude-sonnet-4-6";
 
 const judgeLog = createSubsystemLogger("internal-judge");
 const ajv = new AjvCtor({ allErrors: false, strict: false });
-const validatorCache = new WeakMap<JudgeJsonSchema, ValidateFunction>();
+// WHY: WeakMap requires object keys, but `JudgeJsonSchema` widens to
+// `AnySchema` which includes `boolean` for trivially-allow/deny schemas. A
+// regular Map keyed by the schema reference works for both shapes; the
+// cache is small (one entry per distinct schema literal) so the lack of GC
+// pressure is acceptable.
+const validatorCache = new Map<JudgeJsonSchema, ValidateFunction>();
 
 function compileValidator(schema: JudgeJsonSchema): ValidateFunction {
   const cached = validatorCache.get(schema);
@@ -265,7 +270,15 @@ export async function invokeInternalJudge<TInput extends Record<string, unknown>
     timeoutMs,
   });
   const latencyMs = now() - started;
-  const finalized = finalizeProviderResult<TOutput>(req, providerResult, latencyMs);
+  // WHY: `finalizeProviderResult` only reads `req.responseSchema` and `req.role`
+  // — fields shared by every JudgeRequest regardless of `TInput`. Narrowing to
+  // the constraint at the call boundary is safe; TS treats `JudgeRequest` as
+  // invariant in `TInput` so it cannot infer this implicitly.
+  const finalized = finalizeProviderResult<TOutput>(
+    req as JudgeRequest<Record<string, unknown>, TOutput>,
+    providerResult,
+    latencyMs,
+  );
   logResponseEvent(req.role, modelId, finalized);
   return finalized;
 }

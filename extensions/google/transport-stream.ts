@@ -16,14 +16,18 @@ import {
   createOutputFirewall,
   createOutputFirewallState,
   createWritableTransportEventStream,
+  envelopeHash,
   failTransportStream,
   finalizeTransportStream,
+  GENESIS_PREV_HASH,
   mergeTransportHeaders,
+  mintEnvelope,
   sanitizeTransportPayloadText,
   scanOutputChunk,
   snapshotFirewallInputs,
   stripSystemPromptCacheBoundary,
   transformTransportMessages,
+  type VerifiedCmdEnvelope,
   type WritableTransportStream,
 } from "openclaw/plugin-sdk/provider-transport-runtime";
 import { normalizeLowercaseStringOrEmpty } from "openclaw/plugin-sdk/string-coerce-runtime";
@@ -94,6 +98,10 @@ type GoogleTransportContentBlock =
       name: string;
       arguments: Record<string, unknown>;
       thoughtSignature?: string;
+      // P1.1 verified-cmd envelope minted at extraction time. Dispatch refuses
+      // tool calls whose envelope does not chain-verify; absence is also a
+      // refusal. Turn-scoped, non-persisted, never exposed to the model.
+      verifiedCmd?: VerifiedCmdEnvelope;
     };
 
 type MutableAssistantOutput = {
@@ -1237,6 +1245,9 @@ function createGoogleTransportStreamFn(kind: CanonicalGoogleTransportApi): Strea
         // cannot dispatch tool calls once a sensitive literal is echoed.
         const turnFirewall = createOutputFirewall(snapshotFirewallInputs());
         let firewallTripped = false;
+        // P1.1 verified-cmd chain head, turn-scoped per verified-cmd.ts invariant.
+        // Each minted envelope's hash becomes the next envelope's prevHash.
+        let verifiedCmdChainHead = GENESIS_PREV_HASH;
         const tripGoogleFirewall = (
           family: string,
           literalLength: number,
@@ -1406,6 +1417,15 @@ function createGoogleTransportStreamFn(kind: CanonicalGoogleTransportApi): Strea
                     part.thoughtSignature,
                   ),
                 };
+                // P1.1: mint envelope once args are finalized. Chain head moves
+                // forward only on successful mint, preserving turn order.
+                const envelope = mintEnvelope(
+                  { name: toolCall.name, args: toolCall.arguments },
+                  "model",
+                  verifiedCmdChainHead,
+                );
+                toolCall.verifiedCmd = envelope;
+                verifiedCmdChainHead = envelopeHash(envelope);
                 output.content.push(toolCall);
                 const blockIndex = output.content.length - 1;
                 stream.push({

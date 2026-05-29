@@ -441,15 +441,17 @@ describe("google transport stream", () => {
     );
     const result = await stream.result();
 
-    expect(result.content).toEqual([
-      {
-        type: "toolCall",
-        id: "call_1",
-        name: "lookup",
-        arguments: { q: "hello" },
-        thoughtSignature: "call_sig_merged_1",
-      },
-    ]);
+    expect(result.content).toHaveLength(1);
+    // toMatchObject for subset shape because P1.1 adds a `verifiedCmd` envelope
+    // field on every minted toolCall; the chain-mint behaviour is covered by
+    // a dedicated test below.
+    expect(result.content[0]).toMatchObject({
+      type: "toolCall",
+      id: "call_1",
+      name: "lookup",
+      arguments: { q: "hello" },
+      thoughtSignature: "call_sig_merged_1",
+    });
   });
 
   it("keeps explicit thinking signatures after tool-call SSE parts", async () => {
@@ -501,6 +503,75 @@ describe("google transport stream", () => {
       thinkingSignature: "thought_sig_after_call",
     });
     expect(result.content[2]).toEqual({ type: "text", text: "answer" });
+  });
+
+  it("mints chained verified-cmd envelopes across two Google function calls in a turn", async () => {
+    const { envelopeHash, GENESIS_PREV_HASH } = await import(
+      "openclaw/plugin-sdk/provider-transport-runtime"
+    );
+    guardedFetchMock.mockResolvedValueOnce(
+      buildSseResponse([
+        {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    functionCall: { id: "call_a", name: "lookup", args: { q: "alpha" } },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+        {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    functionCall: { id: "call_b", name: "lookup", args: { q: "beta" } },
+                  },
+                ],
+              },
+              finishReason: "STOP",
+            },
+          ],
+        },
+      ]),
+    );
+
+    const streamFn = createGoogleGenerativeAiTransportStreamFn();
+    const stream = await Promise.resolve(
+      streamFn(
+        buildGeminiModel({
+          id: "gemini-3.1-pro-preview",
+          name: "Gemini 3.1 Pro Preview",
+        }),
+        {
+          messages: [{ role: "user", content: "two lookups", timestamp: 0 }],
+        } as never,
+      ),
+    );
+    const result = await stream.result();
+
+    const toolCalls = result.content.filter(
+      (block): block is Record<string, unknown> & { verifiedCmd?: Record<string, unknown> } =>
+        (block as { type?: string }).type === "toolCall",
+    );
+    expect(toolCalls).toHaveLength(2);
+    const firstEnv = toolCalls[0].verifiedCmd;
+    const secondEnv = toolCalls[1].verifiedCmd;
+    if (!firstEnv || !secondEnv) {
+      throw new Error("expected verifiedCmd envelope on both Google toolCall blocks");
+    }
+    expect(firstEnv.prevHash).toBe(GENESIS_PREV_HASH);
+    expect(firstEnv.provenance).toBe("model");
+    expect(firstEnv.nonce).toHaveLength(64);
+    expect(secondEnv.prevHash).toBe(
+      envelopeHash(firstEnv as unknown as Parameters<typeof envelopeHash>[0]),
+    );
+    expect(secondEnv.nonce).not.toBe(firstEnv.nonce);
   });
 
   it("builds a lean Gemini 3 first-response retry payload", () => {
@@ -1819,8 +1890,8 @@ describe("google transport stream", () => {
         ),
       );
       // Drain
-      for await (const _event of handle as AsyncIterable<unknown>) {
-        void _event;
+      for await (const event of handle as AsyncIterable<unknown>) {
+        void event;
       }
       const result = await handle.result();
       expect(result.stopReason).toBe("error");
@@ -1899,8 +1970,8 @@ describe("google transport stream", () => {
           { apiKey: "gemini-api-key" } as never,
         ),
       );
-      for await (const _event of handle as AsyncIterable<unknown>) {
-        void _event;
+      for await (const event of handle as AsyncIterable<unknown>) {
+        void event;
       }
       const result = await handle.result();
       expect(result.stopReason).toBe("stop");

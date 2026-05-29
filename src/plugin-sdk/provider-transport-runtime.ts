@@ -15,6 +15,17 @@ export {
   type OutputFirewallInputs,
 } from "../security/output-firewall.js";
 export {
+  envelopeHash,
+  GENESIS_PREV_HASH,
+  mintEnvelope,
+  serializeEnvelope,
+  verifyEnvelope,
+  type VerifiedCmdCall,
+  type VerifiedCmdEnvelope,
+  type VerifiedCmdProvenance,
+  type VerifyEnvelopeResult,
+} from "../security/verified-cmd.js";
+export {
   clearResolvedSecretsForTests,
   recordResolvedSecret,
 } from "../shared/process-secret-literals.js";

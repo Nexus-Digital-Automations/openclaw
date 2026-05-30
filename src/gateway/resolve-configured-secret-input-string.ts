@@ -34,6 +34,10 @@ export async function resolveConfiguredSecretInputString(params: {
   value: unknown;
   path: string;
   unresolvedReasonStyle?: SecretInputUnresolvedReasonStyle;
+  // G.3 — when set, resolved bytes get tagged to this session so cross-session
+  // reads can be refused. Startup-time CLI callers pass undefined explicitly;
+  // request-time gateway callers thread it from the request's session scope.
+  sessionId?: string;
 }): Promise<{ value?: string; unresolvedRefReason?: string }> {
   const style = params.unresolvedReasonStyle ?? "generic";
   const { ref } = resolveSecretInputRef({
@@ -49,6 +53,7 @@ export async function resolveConfiguredSecretInputString(params: {
     const resolved = await resolveSecretRefValues([ref], {
       config: params.config,
       env: params.env,
+      sessionId: params.sessionId,
     });
     const resolvedValue = resolved.get(secretRefKey(ref));
     if (typeof resolvedValue !== "string") {
@@ -92,6 +97,8 @@ export async function resolveConfiguredSecretInputWithFallback(params: {
   path: string;
   unresolvedReasonStyle?: SecretInputUnresolvedReasonStyle;
   readFallback?: () => string | undefined;
+  // G.3 — forwarded to the inner resolveConfiguredSecretInputString.
+  sessionId?: string;
 }): Promise<{
   value?: string;
   source?: ConfiguredSecretInputSource;
@@ -128,6 +135,7 @@ export async function resolveConfiguredSecretInputWithFallback(params: {
     value: params.value,
     path: params.path,
     unresolvedReasonStyle: params.unresolvedReasonStyle,
+    sessionId: params.sessionId,
   });
   if (resolved.value) {
     return {
@@ -158,6 +166,8 @@ export async function resolveRequiredConfiguredSecretRefInputString(params: {
   value: unknown;
   path: string;
   unresolvedReasonStyle?: SecretInputUnresolvedReasonStyle;
+  // G.3 — forwarded to the inner resolveConfiguredSecretInputString.
+  sessionId?: string;
 }): Promise<string | undefined> {
   const { ref } = resolveSecretInputRef({
     value: params.value,
@@ -173,6 +183,7 @@ export async function resolveRequiredConfiguredSecretRefInputString(params: {
     value: params.value,
     path: params.path,
     unresolvedReasonStyle: params.unresolvedReasonStyle,
+    sessionId: params.sessionId,
   });
   if (resolved.value) {
     return resolved.value;

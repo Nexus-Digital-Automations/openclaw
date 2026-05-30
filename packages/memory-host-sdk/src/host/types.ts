@@ -1,5 +1,12 @@
 export type MemorySource = "memory" | "sessions";
 
+// C.1 (1.E) — memory taint origin. Snippets ingested from untrusted-zone
+// paths (per workspace-zones classifier) are tagged `untrusted` so the
+// prompt-section builder can wrap them in external-content markers on
+// retrieval. Pre-migration rows and trusted-zone ingest both default to
+// `trusted`, so behaviour is unchanged for legacy data.
+export type MemoryOrigin = "trusted" | "untrusted";
+
 export type MemorySearchResult = {
   path: string;
   startLine: number;
@@ -9,6 +16,7 @@ export type MemorySearchResult = {
   textScore?: number;
   snippet: string;
   source: MemorySource;
+  origin?: MemoryOrigin;
   citation?: string;
 };
 

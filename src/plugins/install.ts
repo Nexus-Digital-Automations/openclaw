@@ -125,7 +125,8 @@ export type PluginInstallErrorCode =
   | "plugin.install.unsigned"
   | "plugin.install.signature_invalid"
   | "plugin.install.unknown_publisher"
-  | "plugin.install.signature_drift";
+  | "plugin.install.signature_drift"
+  | "plugin.install.capabilities_malformed";
 
 export type InstallPluginResult =
   | {
@@ -1637,7 +1638,7 @@ async function installPluginFromPackageDir(
   const enforcementEnabled = isPluginSigningEnforcementEnabled();
   const allowUnsigned =
     params.allowUnsigned === true || params.dangerouslyForceUnsafeInstall === true;
-  if (enforcementEnabled || allowUnsigned === false) {
+  if (enforcementEnabled || !allowUnsigned) {
     const { enforcePluginInstallSignature } = await import("./install-signing-gate.js");
     const signingResult = await enforcePluginInstallSignature({
       packageDir: params.packageDir,

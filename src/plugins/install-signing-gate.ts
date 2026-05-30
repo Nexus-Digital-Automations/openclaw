@@ -20,19 +20,34 @@ import {
   parsePluginSignatureSidecar,
   verifyPluginSignature,
 } from "../security/plugin-signing.js";
+import {
+  normalizeCapabilitiesManifest,
+  type PluginCapabilities,
+} from "./capabilities.js";
 
 export const PLUGIN_INSTALL_SIGNING_ERROR_CODE = {
   UNSIGNED: "plugin.install.unsigned",
   SIGNATURE_INVALID: "plugin.install.signature_invalid",
   UNKNOWN_PUBLISHER: "plugin.install.unknown_publisher",
   SIGNATURE_DRIFT: "plugin.install.signature_drift",
+  CAPABILITIES_MALFORMED: "plugin.install.capabilities_malformed",
 } as const;
 
 export type PluginInstallSigningErrorCode =
   (typeof PLUGIN_INSTALL_SIGNING_ERROR_CODE)[keyof typeof PLUGIN_INSTALL_SIGNING_ERROR_CODE];
 
 export type PluginSigningGateResult =
-  | { ok: true; publisherFingerprint?: string }
+  | {
+      ok: true;
+      publisherFingerprint?: string;
+      // G.1 — capability manifest parsed from openclaw.plugin.json. Covered
+      // by the same signed plugin_hash because openclaw.plugin.json lives in
+      // the plugin source tree that gets hashed by `canonicalPluginHashHex`.
+      // Absent capabilities block in the manifest is fine — runtime then
+      // treats the plugin as fully constrained (deny-by-default) once the
+      // host hook attachments / fetch wrappers consult the capabilities.
+      capabilities?: PluginCapabilities;
+    }
   | { ok: false; code: PluginInstallSigningErrorCode; reason: string };
 
 export type PluginSigningGateOptions = {
@@ -92,7 +107,55 @@ export async function enforcePluginInstallSignature(
       reason: `publisher ${sidecar.publisher.fingerprint} is not in known-publishers and is not first-party`,
     };
   }
-  return { ok: true, publisherFingerprint: sidecar.publisher.fingerprint };
+  const capabilitiesResult = await loadCapabilitiesFromManifest(opts.packageDir);
+  if (!capabilitiesResult.ok) {
+    return {
+      ok: false,
+      code: PLUGIN_INSTALL_SIGNING_ERROR_CODE.CAPABILITIES_MALFORMED,
+      reason: capabilitiesResult.reason,
+    };
+  }
+  return {
+    ok: true,
+    publisherFingerprint: sidecar.publisher.fingerprint,
+    ...(capabilitiesResult.capabilities ? { capabilities: capabilitiesResult.capabilities } : {}),
+  };
+}
+
+async function loadCapabilitiesFromManifest(
+  packageDir: string,
+): Promise<
+  | { ok: true; capabilities?: PluginCapabilities }
+  | { ok: false; reason: string }
+> {
+  const manifestPath = path.join(packageDir, "openclaw.plugin.json");
+  if (!existsSync(manifestPath)) {
+    return { ok: true };
+  }
+  let raw: string;
+  try {
+    raw = await readFile(manifestPath, "utf8");
+  } catch (err) {
+    return { ok: false, reason: `failed to read openclaw.plugin.json: ${String(err)}` };
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    return { ok: false, reason: `openclaw.plugin.json is not valid JSON: ${String(err)}` };
+  }
+  if (!parsed || typeof parsed !== "object") {
+    return { ok: false, reason: "openclaw.plugin.json root must be an object" };
+  }
+  const capabilitiesField = (parsed as Record<string, unknown>).capabilities;
+  if (capabilitiesField === undefined) {
+    return { ok: true };
+  }
+  const capabilities = normalizeCapabilitiesManifest(capabilitiesField);
+  if (capabilities === null) {
+    return { ok: false, reason: "openclaw.plugin.json capabilities must be an object" };
+  }
+  return { ok: true, capabilities };
 }
 
 async function canonicalPluginHashHex(pluginRoot: string): Promise<string> {

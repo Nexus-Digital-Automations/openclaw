@@ -90,6 +90,11 @@ export type MemoryProviderStatus = {
   custom?: Record<string, unknown>;
 };
 
+export type MemoryReclassifyResult = {
+  total: number;
+  updated: number;
+};
+
 export interface MemorySearchManager {
   search(
     query: string,
@@ -110,6 +115,12 @@ export interface MemorySearchManager {
     sessionFiles?: string[];
     progress?: (update: MemorySyncProgressUpdate) => void;
   }): Promise<void>;
+  // Re-runs workspace-zones classification over every chunks row and updates
+  // origin_source where the resolved zone differs. Idempotent — a second run
+  // produces zero updates. Used by `openclaw memory reclassify` to backfill
+  // origin on databases indexed before C.1, or after the operator changes
+  // their untrusted-zone configuration.
+  reclassify?(): Promise<MemoryReclassifyResult>;
   getCachedEmbeddingAvailability?(): MemoryEmbeddingProbeResult | null;
   probeEmbeddingAvailability(): Promise<MemoryEmbeddingProbeResult>;
   probeVectorStoreAvailability?(): Promise<boolean>;

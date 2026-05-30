@@ -177,9 +177,22 @@ type ResolveApiKeyForProfileParams = {
 
 type SecretDefaults = NonNullable<OpenClawConfig["secrets"]>["defaults"];
 
+// G.3 — gate moved here from refreshOAuthCredentialForRuntime so every refresh
+// path (the runtime wrapper, the OAuth-manager-driven background refresh, any
+// future caller) inherits the cross-session refuse instead of relying on
+// individual callers to remember the gate. Downstream paths (plugin
+// refreshOAuth hooks, chutes endpoint, getOAuthApiKey external SDK) do not
+// themselves resolve secrets — they exchange refresh tokens directly — so the
+// gate at this entry point is the enforcement boundary. Future commit will
+// extend the plugin SDK `refreshOAuth?(context)` interface to also receive
+// `requestingSessionId` for plugins that DO call into resolve internally.
 async function refreshOAuthCredential(
   credential: OAuthCredential,
+  requestingSessionId?: string,
 ): Promise<OAuthCredentials | null> {
+  if (requestingSessionId && credential.ownerSessionId) {
+    refuseCrossSessionRead(credential.ownerSessionId, requestingSessionId);
+  }
   const pluginRefreshed = await refreshProviderOAuthCredentialWithPlugin({
     provider: credential.provider,
     context: credential,
@@ -207,13 +220,12 @@ export async function refreshOAuthCredentialForRuntime(params: {
   // G.3 — when set, refuse refresh if the credential is owned by a different
   // session. Profiles created before G.3 land have no `ownerSessionId` and
   // refresh is unrestricted (grandfather policy). When both are present they
-  // must match exactly or `CrossSessionSecretReadError` is thrown.
+  // must match exactly or `CrossSessionSecretReadError` is thrown. The gate
+  // itself lives inside `refreshOAuthCredential` so every refresh entry point
+  // inherits it; this wrapper just forwards the id.
   requestingSessionId?: string;
 }): Promise<OAuthCredential | null> {
-  if (params.requestingSessionId && params.credential.ownerSessionId) {
-    refuseCrossSessionRead(params.credential.ownerSessionId, params.requestingSessionId);
-  }
-  const refreshed = await refreshOAuthCredential(params.credential);
+  const refreshed = await refreshOAuthCredential(params.credential, params.requestingSessionId);
   return refreshed
     ? {
         ...params.credential,

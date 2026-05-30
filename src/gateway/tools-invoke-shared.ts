@@ -12,6 +12,11 @@ import { getPluginToolMeta } from "../plugins/tools.js";
 import { tryAppendAuditEntry } from "../security/audit-chain.js";
 import { createToolOutputRedactor } from "../security/tool-output-redactor.js";
 import {
+  computeTurnSalt,
+  currentSessionTurnCounter,
+  parseToolNameSalt,
+} from "../security/tool-name-salt.js";
+import {
   envelopeHash,
   verifyEnvelope,
   type VerifiedCmdEnvelope,
@@ -178,6 +183,35 @@ function resolveToolSource(tool: AnyAgentTool): "core" | "plugin" | "channel" {
   return "core";
 }
 
+const TOOL_NAME_SALT_DELIMITER = "__cz_";
+
+/**
+ * Reverse the schema-fuzz salt suffix on an on-the-wire tool name.
+ *
+ * - Name without the delimiter passes through unchanged (legacy callers,
+ *   current production state where the forward map is not yet activated).
+ * - Name with the delimiter and a matching session salt returns the
+ *   original tool name.
+ * - Name with the delimiter but mismatched salt returns `null` so the
+ *   caller surfaces a structured refusal. Silently looking up the
+ *   unsalted name would defeat the defense.
+ */
+function resolveSaltedToolName(rawToolName: string, sessionKeyInput: unknown): string | null {
+  if (!rawToolName.includes(TOOL_NAME_SALT_DELIMITER)) {
+    return rawToolName;
+  }
+  const sessionKey = normalizeOptionalString(sessionKeyInput);
+  if (!sessionKey) {
+    return null;
+  }
+  const turnCounter = currentSessionTurnCounter(sessionKey);
+  if (turnCounter <= 0) {
+    return null;
+  }
+  const expectedSalt = computeTurnSalt(sessionKey, turnCounter);
+  return parseToolNameSalt(rawToolName, expectedSalt);
+}
+
 export async function invokeGatewayTool(params: {
   cfg: OpenClawConfig;
   input: ToolsInvokeInput;
@@ -193,13 +227,34 @@ export async function invokeGatewayTool(params: {
   // or break refuses the call. Backward-compatible: unset = legacy path.
   expectedPrevHash?: string;
 }): Promise<ToolsInvokeOutcome> {
-  const toolName = normalizeOptionalString(params.input.name ?? params.input.tool) ?? "";
-  if (!toolName) {
+  const rawToolName = normalizeOptionalString(params.input.name ?? params.input.tool) ?? "";
+  if (!rawToolName) {
     return {
       ok: false,
       status: 400,
       toolName: "",
       error: { type: "invalid_request", message: "tools.invoke requires name" },
+    };
+  }
+  // A.2 — reverse-map schema-fuzz salt. If the on-the-wire tool name carries
+  // the salt delimiter, attempt to parse against the current session's salt.
+  // Mismatch (delimiter present, salt wrong) is an injection-shaped refusal,
+  // NOT a silent fallback. Names without the delimiter pass through verbatim
+  // so unsalted callers (current production state) keep working.
+  const toolName = resolveSaltedToolName(rawToolName, params.input.sessionKey);
+  if (toolName === null) {
+    logWarn(
+      `[tool-name-salt] refusing tool dispatch: salted-name mismatch tool=${rawToolName}`,
+    );
+    return {
+      ok: false,
+      status: 400,
+      toolName: rawToolName,
+      error: {
+        type: "invalid_request",
+        message: "Tool name carries schema-fuzz salt that does not match this session's turn salt.",
+        code: "tool_name_salt.mismatch",
+      },
     };
   }
 

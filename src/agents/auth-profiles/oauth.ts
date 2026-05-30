@@ -13,6 +13,7 @@ import {
   refreshProviderOAuthCredentialWithPlugin,
 } from "../../plugins/provider-runtime.runtime.js";
 import { resolveSecretRefString, type SecretRefResolveCache } from "../../secrets/resolve.js";
+import { refuseCrossSessionRead } from "../../security/session-secret-isolation.js";
 import { normalizeLowercaseStringOrEmpty } from "../../shared/string-coerce.js";
 import { normalizeOptionalSecretInput } from "../../utils/normalize-secret-input.js";
 import { refreshChutesTokens } from "../chutes-oauth.js";
@@ -203,7 +204,15 @@ async function refreshOAuthCredential(
 
 export async function refreshOAuthCredentialForRuntime(params: {
   credential: OAuthCredential;
+  // G.3 — when set, refuse refresh if the credential is owned by a different
+  // session. Profiles created before G.3 land have no `ownerSessionId` and
+  // refresh is unrestricted (grandfather policy). When both are present they
+  // must match exactly or `CrossSessionSecretReadError` is thrown.
+  requestingSessionId?: string;
 }): Promise<OAuthCredential | null> {
+  if (params.requestingSessionId && params.credential.ownerSessionId) {
+    refuseCrossSessionRead(params.credential.ownerSessionId, params.requestingSessionId);
+  }
   const refreshed = await refreshOAuthCredential(params.credential);
   return refreshed
     ? {

@@ -57,6 +57,14 @@ export type OAuthCredential = OAuthCredentials & {
   copyToAgents?: boolean;
   email?: string;
   displayName?: string;
+  /**
+   * G.3 — session id that owns this OAuth profile's secret material. When set,
+   * `refuseCrossSessionRead` rejects refresh attempts from other sessions even
+   * when the same plugin is loaded. Profiles created before G.3 land with this
+   * field unset, in which case refresh is unrestricted (grandfather policy).
+   * New profile creations should always stamp this from the active session.
+   */
+  ownerSessionId?: string;
 };
 
 export type AuthProfileCredential = ApiKeyCredential | TokenCredential | OAuthCredential;

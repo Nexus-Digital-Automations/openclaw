@@ -13,6 +13,7 @@ import { formatErrorMessage } from "../infra/errors.js";
 import { FsSafeError, readSecureFile } from "../infra/fs-safe.js";
 import { inspectPathPermissions, safeStat } from "../security/audit-fs.js";
 import { isPathInside } from "../security/scan-paths.js";
+import { recordSessionSecret } from "../security/session-secret-isolation.js";
 import { recordResolvedSecret } from "../shared/process-secret-literals.js";
 import { resolveUserPath } from "../utils.js";
 import { runTasksWithConcurrency } from "../utils/run-with-concurrency.js";
@@ -43,6 +44,11 @@ type ResolveSecretRefOptions = {
   config: OpenClawConfig;
   env?: NodeJS.ProcessEnv;
   cache?: SecretRefResolveCache;
+  // G.3 — when present, the resolved secret bytes are tagged with this
+  // session id so cross-session reads can be refused. Absent at startup-time
+  // and audit-time resolution where no session is in scope; that path keeps
+  // the process-global registry as the sole owner.
+  sessionId?: string;
 };
 
 type ResolutionLimits = {
@@ -904,6 +910,13 @@ export async function resolveSecretRefValues(
         // own a SecretRefResolveCache (transcript writer, gateway logger,
         // approval-channel formatter) still mask the decrypted bytes.
         recordResolvedSecret(value);
+        // G.3 — tag the resolved bytes to the requesting session so
+        // refuseCrossSessionRead can refuse later cross-session lookups.
+        // Startup / audit / CLI paths pass no sessionId; that's fine — the
+        // process-global registry above already covers them.
+        if (options.sessionId) {
+          recordSessionSecret(options.sessionId, value);
+        }
       }
     }
   }

@@ -17,19 +17,22 @@
  * JSON schema. Worker can be jailbroken; controller cannot, because it
  * lacks the attacker-controlled context.
  *
- * Cost: every tool call gets a Haiku-class invocation. Default OFF behind
- * `OPENCLAW_SECURITY_CONTROLLER_JUDGE=on` so the ops surface ships clean
- * and security-sensitive deployments opt in explicitly. When the env var
- * is unset/empty/anything-but-"on", `evaluateToolCall` returns
- * `{ approved: true, reason: "controller_disabled" }` without making any
- * API call.
+ * Cost: every tool call gets a Haiku-class invocation. **Default ON**: the
+ * controller fires on every tool call unless `OPENCLAW_SECURITY_CONTROLLER_JUDGE`
+ * is explicitly set to "off" / "false" / "0". Reasoning: the controller is the
+ * only defense against semantic exfil via a clean adversarial tool call. The
+ * Haiku latency cost (~150-300ms p50) is acceptable for the security posture;
+ * operators who need the latency back can opt out explicitly with full
+ * understanding of the gap they are reopening.
  *
- * Fail-open on judge error: timeout / model_error / refused / schema_violation
- * return `{ approved: true, reason: "judge_unavailable:<sub-reason>" }` and
- * log a WARN. The controller is defense-in-depth on top of firewall +
- * envelope; failing closed here would brick the agent on any judge outage.
- * Operators who want fail-closed can set
- * `OPENCLAW_SECURITY_CONTROLLER_JUDGE_FAIL_CLOSED=on`.
+ * **Fail-closed on judge error**: timeout / model_error / refused /
+ * schema_violation return `{ approved: false, reason: "judge_unavailable:..." }`
+ * by default. Reasoning: judge unavailability is exactly the failure mode an
+ * attacker would induce to bypass the controller — treating it as a security
+ * incident is more honest than soft-failing through. Operators who prefer
+ * availability over defense-in-depth (e.g. dev environments, CI smoke tests)
+ * can set `OPENCLAW_SECURITY_CONTROLLER_JUDGE_FAIL_CLOSED` to "off" / "false"
+ * / "0" to restore fail-open behavior.
  *
  * @stable
  */
@@ -76,9 +79,9 @@ export type ControllerVerdict =
  * Evaluate a tool call via the controller judge. Returns synchronously when
  * the controller is disabled; otherwise performs one Haiku-class invocation.
  *
- * Failure modes: never throws. Judge errors degrade to approved=true with a
- * `judge_unavailable` reason, unless `OPENCLAW_SECURITY_CONTROLLER_JUDGE_FAIL_CLOSED=on`
- * is set, in which case the same condition returns approved=false.
+ * Failure modes: never throws. Judge errors default to approved=false
+ * (fail-closed) with a `judge_unavailable:<reason>` string; opt out via
+ * `OPENCLAW_SECURITY_CONTROLLER_JUDGE_FAIL_CLOSED=off` to restore fail-open.
  *
  * @stable
  */
@@ -110,16 +113,25 @@ export async function evaluateToolCall(input: {
 }
 
 function isControllerEnabled(): boolean {
-  return readEnvFlag(ENABLED_ENV_VAR);
+  return readEnvFlagDefaultOn(ENABLED_ENV_VAR);
 }
 
 function isFailClosed(): boolean {
-  return readEnvFlag(FAIL_CLOSED_ENV_VAR);
+  return readEnvFlagDefaultOn(FAIL_CLOSED_ENV_VAR);
 }
 
-function readEnvFlag(name: string): boolean {
+// Default-on semantics: returns true when the env var is unset / empty /
+// anything-not-an-explicit-off-token. Operators have to spell out their
+// opt-out, which surfaces in audit logs and shell history.
+function readEnvFlagDefaultOn(name: string): boolean {
   const value = process.env[name];
-  return typeof value === "string" && value.toLowerCase() === "on";
+  if (typeof value !== "string") {
+    return true;
+  }
+  const normalized = value.trim().toLowerCase();
+  return (
+    normalized !== "off" && normalized !== "false" && normalized !== "0" && normalized !== "no"
+  );
 }
 
 function interpretJudgeResponse(

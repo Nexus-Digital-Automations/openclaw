@@ -1,12 +1,11 @@
 /**
  * Spec: B.1 controller judge — asymmetric trust split, controller side.
  *
- * Verifies that:
- *  - Default OFF (no env var) returns approved=true without calling the judge.
- *  - When enabled, a "fast" judge invocation is performed and its verdict
- *    flows through.
- *  - Judge unavailability (timeout / model_error / refused / schema_violation)
- *    defaults to approved=true unless OPENCLAW_SECURITY_CONTROLLER_JUDGE_FAIL_CLOSED=on.
+ * Verifies the **default-on, fail-closed** semantics:
+ *  - Unset env → judge fires (controller is enabled by default).
+ *  - Explicit opt-out tokens (off/false/0/no) → judge is bypassed.
+ *  - Judge unavailability → approved=false by default (fail-closed).
+ *  - Explicit fail-open opt-out → judge errors degrade to approved=true.
  *  - Reason text is redacted before exposure.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -30,28 +29,51 @@ afterEach(() => {
   process.env = { ...ORIGINAL_ENV };
 });
 
-describe("controller-judge — default OFF", () => {
-  it("returns approved=true without invoking the judge when env var is unset", async () => {
+describe("controller-judge — default ON", () => {
+  it("invokes the judge when no env var is set", async () => {
+    judgeMock.mockResolvedValueOnce({
+      ok: true,
+      output: { approved: true, reason: "ok" },
+      modelId: "claude-haiku-4-5",
+      latencyMs: 100,
+      inputTokens: 50,
+      outputTokens: 20,
+    });
     const verdict = await evaluateToolCall({ toolName: "fs_write", argv: { path: "/a" } });
+    expect(judgeMock).toHaveBeenCalledTimes(1);
     expect(verdict.approved).toBe(true);
-    expect(verdict.reason).toBe("controller_disabled");
-    expect(judgeMock).not.toHaveBeenCalled();
   });
 
-  it("treats env value other than 'on' as disabled (case-insensitive)", async () => {
-    process.env.OPENCLAW_SECURITY_CONTROLLER_JUDGE = "true";
-    const verdict = await evaluateToolCall({ toolName: "fs_write", argv: {} });
-    expect(verdict.approved).toBe(true);
-    expect(judgeMock).not.toHaveBeenCalled();
+  it("still invokes the judge when env var is set to 'on' (legacy compat)", async () => {
+    process.env.OPENCLAW_SECURITY_CONTROLLER_JUDGE = "on";
+    judgeMock.mockResolvedValueOnce({
+      ok: true,
+      output: { approved: true },
+      modelId: "claude-haiku-4-5",
+      latencyMs: 100,
+      inputTokens: 50,
+      outputTokens: 20,
+    });
+    await evaluateToolCall({ toolName: "fs_read", argv: {} });
+    expect(judgeMock).toHaveBeenCalledTimes(1);
   });
 });
 
-describe("controller-judge — enabled, judge approves", () => {
-  beforeEach(() => {
-    process.env.OPENCLAW_SECURITY_CONTROLLER_JUDGE = "on";
-  });
+describe("controller-judge — explicit opt-out", () => {
+  it.each(["off", "false", "0", "no", "OFF", "FALSE"])(
+    "bypasses the judge when env value is %s",
+    async (value) => {
+      process.env.OPENCLAW_SECURITY_CONTROLLER_JUDGE = value;
+      const verdict = await evaluateToolCall({ toolName: "fs_write", argv: {} });
+      expect(judgeMock).not.toHaveBeenCalled();
+      expect(verdict.approved).toBe(true);
+      expect(verdict.reason).toBe("controller_disabled");
+    },
+  );
+});
 
-  it("passes toolName and argv to the judge with role='tool-call-controller'", async () => {
+describe("controller-judge — judge approves / rejects", () => {
+  it("passes toolName + argv with role='tool-call-controller' and untrustedFields", async () => {
     judgeMock.mockResolvedValueOnce({
       ok: true,
       output: { approved: true, reason: "looks safe" },
@@ -61,7 +83,6 @@ describe("controller-judge — enabled, judge approves", () => {
       outputTokens: 20,
     });
     await evaluateToolCall({ toolName: "fs_read", argv: { path: "/x" } });
-    expect(judgeMock).toHaveBeenCalledTimes(1);
     const callArg = judgeMock.mock.calls[0][0];
     expect(callArg.role).toBe("tool-call-controller");
     expect(callArg.modelHint).toBe("fast");
@@ -69,27 +90,7 @@ describe("controller-judge — enabled, judge approves", () => {
     expect(callArg.untrustedFields).toEqual(["argv"]);
   });
 
-  it("returns approved=true with the judge's reason on positive verdict", async () => {
-    judgeMock.mockResolvedValueOnce({
-      ok: true,
-      output: { approved: true, reason: "consistent with user request" },
-      modelId: "claude-haiku-4-5",
-      latencyMs: 100,
-      inputTokens: 50,
-      outputTokens: 20,
-    });
-    const verdict = await evaluateToolCall({ toolName: "fs_read", argv: {} });
-    expect(verdict.approved).toBe(true);
-    expect(verdict.reason).toBe("consistent with user request");
-  });
-});
-
-describe("controller-judge — enabled, judge rejects", () => {
-  beforeEach(() => {
-    process.env.OPENCLAW_SECURITY_CONTROLLER_JUDGE = "on";
-  });
-
-  it("returns approved=false with the judge's reason (length-capped)", async () => {
+  it("returns approved=false with the judge's reason on negative verdict", async () => {
     judgeMock.mockResolvedValueOnce({
       ok: true,
       output: { approved: false, reason: "argv looks like exfiltration" },
@@ -108,29 +109,28 @@ describe("controller-judge — enabled, judge rejects", () => {
 });
 
 describe("controller-judge — judge unavailable", () => {
-  beforeEach(() => {
-    process.env.OPENCLAW_SECURITY_CONTROLLER_JUDGE = "on";
-  });
-
-  it("fails open (approved=true) on timeout when fail-closed is not set", async () => {
+  it("fails CLOSED by default on timeout (judge unavailability blocks dispatch)", async () => {
     judgeMock.mockResolvedValueOnce({ ok: false, reason: "timeout", detail: "30s" });
     const verdict = await evaluateToolCall({ toolName: "fs_read", argv: {} });
-    expect(verdict.approved).toBe(true);
+    expect(verdict.approved).toBe(false);
     expect(verdict.reason).toBe("judge_unavailable:timeout");
   });
 
-  it("fails open on schema_violation by default", async () => {
+  it("fails CLOSED by default on schema_violation", async () => {
     judgeMock.mockResolvedValueOnce({ ok: false, reason: "schema_violation", detail: "bad json" });
     const verdict = await evaluateToolCall({ toolName: "fs_read", argv: {} });
-    expect(verdict.approved).toBe(true);
+    expect(verdict.approved).toBe(false);
     expect(verdict.reason).toBe("judge_unavailable:schema_violation");
   });
 
-  it("fails closed when OPENCLAW_SECURITY_CONTROLLER_JUDGE_FAIL_CLOSED=on", async () => {
-    process.env.OPENCLAW_SECURITY_CONTROLLER_JUDGE_FAIL_CLOSED = "on";
-    judgeMock.mockResolvedValueOnce({ ok: false, reason: "model_error", detail: "503" });
-    const verdict = await evaluateToolCall({ toolName: "fs_read", argv: {} });
-    expect(verdict.approved).toBe(false);
-    expect(verdict.reason).toBe("judge_unavailable:model_error");
-  });
+  it.each(["off", "false", "0", "no"])(
+    "fails OPEN when OPENCLAW_SECURITY_CONTROLLER_JUDGE_FAIL_CLOSED=%s (opt-out)",
+    async (value) => {
+      process.env.OPENCLAW_SECURITY_CONTROLLER_JUDGE_FAIL_CLOSED = value;
+      judgeMock.mockResolvedValueOnce({ ok: false, reason: "model_error", detail: "503" });
+      const verdict = await evaluateToolCall({ toolName: "fs_read", argv: {} });
+      expect(verdict.approved).toBe(true);
+      expect(verdict.reason).toBe("judge_unavailable:model_error");
+    },
+  );
 });

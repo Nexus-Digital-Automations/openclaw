@@ -14,7 +14,7 @@
 >    envelope that doesn't chain to the turn's expected `prevHash`.
 > 2. **Output firewall** (`src/security/output-firewall.ts`) — streaming
 >    Aho-Corasick scanner over `{resolvedSecrets, externalContentCanaries,
->    externalContentMarkerBodies, mintedEnvelopeNonces}`. Trip aborts the
+externalContentMarkerBodies, mintedEnvelopeNonces}`. Trip aborts the
 >    stream before any tool dispatch.
 > 3. **External-content wrap + canary** (`src/security/external-content.ts`)
 >    — every untrusted byte flowing into the prompt gets framed with a
@@ -31,18 +31,28 @@
 > 7. **Audit-chain** (`src/security/audit-chain.ts`) — hash-chained
 >    NDJSON audit log of every tool dispatch + dispatch refusal.
 > 8. **Internal-judge controller** (`src/security/controller-judge.ts`,
->    `src/agents/internal-judge.ts`) — opt-in second-LLM controller that
->    judges every tool call in isolation. Default OFF behind
->    `OPENCLAW_SECURITY_CONTROLLER_JUDGE=on`; fail-open by default,
->    fail-closed behind `OPENCLAW_SECURITY_CONTROLLER_JUDGE_FAIL_CLOSED=on`.
+>    `src/agents/internal-judge.ts`) — second-LLM controller that judges
+>    every tool call in isolation against a JSON-schema-constrained
+>    response. **Default ON, fail-closed**: judge unavailability blocks
+>    dispatch with `judge_unavailable:<reason>`. Operators who need the
+>    Haiku-class latency back (~150–300ms p50 per tool call) or want soft
+>    degradation on outage can opt out:
+>    - `OPENCLAW_SECURITY_CONTROLLER_JUDGE=off` disables the controller
+>      entirely. Accepted opt-out tokens: `off`, `false`, `0`, `no`
+>      (case-insensitive). **Weakens defense-in-depth: the only structural
+>      defense against semantic exfil via a clean adversarial tool call.**
+>    - `OPENCLAW_SECURITY_CONTROLLER_JUDGE_FAIL_CLOSED=off` (same opt-out
+>      tokens) restores fail-open: judge errors degrade to approved with a
+>      structured warn log. Appropriate for dev environments / CI smoke
+>      tests where availability matters more than defense.
 >
 > **Triage rubric for prompt-injection reports in this fork:**
 >
-> | Severity | Conditions |
-> |---|---|
-> | **CVE-class** | Reproducible bypass of *all four* of: external-content wrap, output firewall, HITL gate, and verified-cmd envelope chain. Or: a single byte-level bypass of the firewall (Aho-Corasick correctness) that exfiltrates a registered taint literal. |
-> | **Hardening PR** | Bypass of one or two layers but not the full stack; novel injection class the existing primitives demonstrably suppress; novel attack on the controller-judge prompt. |
-> | **Documentation** | Injection chains that the shipped controls already neutralize end-to-end; injection without any tool-dispatch consequence; theoretical chains absent evidence. |
+> | Severity          | Conditions                                                                                                                                                                                                                                       |
+> | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+> | **CVE-class**     | Reproducible bypass of _all four_ of: external-content wrap, output firewall, HITL gate, and verified-cmd envelope chain. Or: a single byte-level bypass of the firewall (Aho-Corasick correctness) that exfiltrates a registered taint literal. |
+> | **Hardening PR**  | Bypass of one or two layers but not the full stack; novel injection class the existing primitives demonstrably suppress; novel attack on the controller-judge prompt.                                                                            |
+> | **Documentation** | Injection chains that the shipped controls already neutralize end-to-end; injection without any tool-dispatch consequence; theoretical chains absent evidence.                                                                                   |
 >
 > The forensic trail for any incident is the audit-chain
 > (`logs/audit-chain.ndjson`) plus the structured-log
@@ -51,7 +61,7 @@
 >
 > Report fork-specific prompt-injection findings to the fork maintainer
 > (this repo), not upstream. Upstream's policy below applies for everything
-> *outside* prompt injection.
+> _outside_ prompt injection.
 
 ---
 

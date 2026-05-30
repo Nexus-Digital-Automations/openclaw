@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
   clearExternalContentBodiesForTests,
+  didCorrelationTouchExternalContent,
   findArgvExternalContentTaint,
   recordExternalContentBody,
+  setExternalContentTouchScope,
 } from "./process-external-content-bodies.js";
 
 afterEach(() => {
@@ -30,5 +32,37 @@ describe("process-external-content-bodies registry", () => {
   it("returns undefined when the argv element itself is shorter than the floor", () => {
     recordExternalContentBody("a body long enough to be tainted");
     expect(findArgvExternalContentTaint(["t", "x"])).toBeUndefined();
+  });
+});
+
+describe("per-correlation-id touch scope (D.1)", () => {
+  it("flags the active correlation when a body is recorded inside its scope", () => {
+    setExternalContentTouchScope("corr-touched");
+    recordExternalContentBody("untrusted snippet from webhook payload");
+    setExternalContentTouchScope(undefined);
+    expect(didCorrelationTouchExternalContent("corr-touched")).toBe(true);
+  });
+
+  it("does not flag correlations whose scope was never active during a record", () => {
+    setExternalContentTouchScope("corr-active");
+    recordExternalContentBody("untrusted snippet from webhook payload");
+    setExternalContentTouchScope(undefined);
+    expect(didCorrelationTouchExternalContent("corr-other")).toBe(false);
+  });
+
+  it("ignores records that occur outside any active scope (no flag)", () => {
+    recordExternalContentBody("untrusted snippet from webhook payload");
+    expect(didCorrelationTouchExternalContent("corr-x")).toBe(false);
+  });
+
+  it("does not flag the scope when only short-floor records are attempted", () => {
+    setExternalContentTouchScope("corr-clean");
+    recordExternalContentBody("short");
+    setExternalContentTouchScope(undefined);
+    expect(didCorrelationTouchExternalContent("corr-clean")).toBe(false);
+  });
+
+  it("returns false for empty correlation id", () => {
+    expect(didCorrelationTouchExternalContent("")).toBe(false);
   });
 });

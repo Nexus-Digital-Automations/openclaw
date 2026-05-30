@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
@@ -29,6 +30,8 @@ import {
   type PluginHookToolInputKind,
   type PluginHookToolKind,
 } from "../plugins/types.js";
+import { tryAppendAuditEntry } from "../security/audit-chain.js";
+import { evaluateToolCall } from "../security/controller-judge.js";
 import { createLazyRuntimeSurface } from "../shared/lazy-runtime.js";
 import { scanArgvForExternalContent } from "../shared/process-external-content-bodies.js";
 import { isPlainObject } from "../utils.js";
@@ -95,7 +98,11 @@ export type HookContext = {
 };
 
 type HookBlockedKind = "veto" | "failure";
-type HookBlockedReason = "plugin-before-tool-call" | "plugin-approval" | "tool-loop";
+type HookBlockedReason =
+  | "plugin-before-tool-call"
+  | "plugin-approval"
+  | "tool-loop"
+  | "controller-rejection";
 type HookOutcome =
   | {
       blocked: true;
@@ -751,6 +758,39 @@ export async function runBeforeToolCallHook(args: {
         triggeredCanaries,
       });
     }
+  }
+
+  // B.1 — controller judge (asymmetric trust split). Default OFF behind
+  // OPENCLAW_SECURITY_CONTROLLER_JUDGE=on. When enabled, every tool call is
+  // reviewed by a separate Haiku-class LLM that never saw the adversarial
+  // prompt — it judges {toolName, argv} in isolation against a constrained
+  // JSON schema. Rejection blocks dispatch with an audit-chain entry tagged
+  // by the synthetic toolName prefix "controller_rejected:" so log readers
+  // can grep for them.
+  const controllerVerdict = await evaluateToolCall({
+    toolName,
+    argv: params,
+    correlationId: args.toolCallId,
+  });
+  if (!controllerVerdict.approved) {
+    tryAppendAuditEntry({
+      entryId: randomUUID(),
+      toolName: `controller_rejected:${toolName}`,
+      argv: params,
+    });
+    log.warn(`[controller-judge] dispatch blocked: tool=${toolName} reason=<redacted>`, {
+      event: "controller_judge.dispatch_blocked",
+      tool_name: toolName,
+      reason: controllerVerdict.reason,
+      tool_call_id: args.toolCallId,
+    });
+    return {
+      blocked: true,
+      kind: "veto",
+      deniedReason: "controller-rejection",
+      reason: controllerVerdict.reason,
+      params,
+    };
   }
 
   const hookRunner = getGlobalHookRunner();

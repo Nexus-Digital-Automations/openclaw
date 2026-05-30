@@ -38,7 +38,48 @@ import {
 
 const MIN_FIREWALL_PATTERN_LENGTH = 8;
 
-export type FirewallFamily = "secret" | "canary" | "marker";
+// E.1 — minted envelope nonce registry. Holds the hex digests of every
+// envelope minted in this process so the firewall can detect a model
+// trying to echo a prior turn's nonce verbatim (the only way the model
+// could forge a "verified" tool call — the nonce is the only secret part
+// of the envelope shape). Single per-process registry per AGENTS.md
+// single-tenant assumption; cleared only by tests.
+const mintedEnvelopeNonces = new Set<string>();
+
+/**
+ * Record an envelope nonce as it is minted by a transport. Call once per
+ * mint, immediately after `mintEnvelope` returns. Idempotent — re-recording
+ * the same nonce is a no-op. Nonces shorter than the firewall floor are
+ * dropped at compile time, not here.
+ *
+ * @stable
+ */
+export function recordEnvelopeNonce(nonce: string): void {
+  if (typeof nonce !== "string" || nonce.length === 0) {
+    return;
+  }
+  mintedEnvelopeNonces.add(nonce);
+}
+
+/**
+ * Snapshot the minted envelope nonces for the firewall builder.
+ *
+ * @stable
+ */
+export function snapshotEnvelopeNonces(): readonly string[] {
+  return [...mintedEnvelopeNonces];
+}
+
+/**
+ * Reset for tests. Production callers must not use this.
+ *
+ * @internal
+ */
+export function clearEnvelopeNoncesForTests(): void {
+  mintedEnvelopeNonces.clear();
+}
+
+export type FirewallFamily = "secret" | "canary" | "marker" | "nonce";
 
 export type FirewallTrip = {
   family: FirewallFamily;
@@ -55,6 +96,7 @@ export type OutputFirewallInputs = {
   secrets: ReadonlySet<string>;
   canaries: ReadonlySet<string>;
   markerBodies: ReadonlySet<string>;
+  nonces: ReadonlySet<string>;
 };
 
 /**
@@ -88,6 +130,7 @@ export function snapshotFirewallInputs(): OutputFirewallInputs {
     secrets: new Set(snapshotResolvedSecrets()),
     canaries: new Set(snapshotExternalContentCanaries()),
     markerBodies: new Set(snapshotExternalContentMarkerBodies()),
+    nonces: new Set(snapshotEnvelopeNonces()),
   };
 }
 
@@ -99,9 +142,11 @@ function collectEntries(
   const secrets = inputs?.secrets ?? new Set(snapshotResolvedSecrets());
   const canaries = inputs?.canaries ?? new Set(snapshotExternalContentCanaries());
   const markerBodies = inputs?.markerBodies ?? new Set(snapshotExternalContentMarkerBodies());
+  const nonces = inputs?.nonces ?? new Set(snapshotEnvelopeNonces());
   pushFamily(out, seen, secrets, "secret");
   pushFamily(out, seen, canaries, "canary");
   pushFamily(out, seen, markerBodies, "marker");
+  pushFamily(out, seen, nonces, "nonce");
   return out;
 }
 

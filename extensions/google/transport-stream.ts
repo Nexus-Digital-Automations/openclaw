@@ -22,6 +22,7 @@ import {
   GENESIS_PREV_HASH,
   mergeTransportHeaders,
   mintEnvelope,
+  recordEnvelopeNonce,
   sanitizeTransportPayloadText,
   scanOutputChunk,
   snapshotFirewallInputs,
@@ -1426,6 +1427,7 @@ function createGoogleTransportStreamFn(kind: CanonicalGoogleTransportApi): Strea
                 );
                 toolCall.verifiedCmd = envelope;
                 verifiedCmdChainHead = envelopeHash(envelope);
+                recordEnvelopeNonce(envelope.nonce);
                 output.content.push(toolCall);
                 const blockIndex = output.content.length - 1;
                 stream.push({

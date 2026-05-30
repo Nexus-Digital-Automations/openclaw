@@ -15,16 +15,23 @@ import {
   clearResolvedSecretsForTests,
   recordResolvedSecret,
 } from "../shared/process-secret-literals.js";
-import { createOutputFirewall, snapshotFirewallInputs } from "./output-firewall.js";
+import {
+  clearEnvelopeNoncesForTests,
+  createOutputFirewall,
+  recordEnvelopeNonce,
+  snapshotFirewallInputs,
+} from "./output-firewall.js";
 
 beforeEach(() => {
   clearResolvedSecretsForTests();
   clearExternalContentBodiesForTests();
+  clearEnvelopeNoncesForTests();
 });
 
 afterEach(() => {
   clearResolvedSecretsForTests();
   clearExternalContentBodiesForTests();
+  clearEnvelopeNoncesForTests();
 });
 
 describe("createOutputFirewall — clean chunks", () => {
@@ -47,7 +54,9 @@ describe("createOutputFirewall — trips by family", () => {
     const firewall = createOutputFirewall(snapshotFirewallInputs());
     const trip = firewall.scan("here is the key sk-not-a-real-format-deadbeef value");
     expect(trip).not.toBeNull();
-    if (trip === null) return;
+    if (trip === null) {
+      return;
+    }
     expect(trip.family).toBe("secret");
     expect(trip.literal).toBe("sk-not-a-real-format-deadbeef");
     expect(trip.offset).toBe(16);
@@ -59,7 +68,9 @@ describe("createOutputFirewall — trips by family", () => {
     const firewall = createOutputFirewall(snapshotFirewallInputs());
     const trip = firewall.scan(`assistant tried to echo ${canary}`);
     expect(trip).not.toBeNull();
-    if (trip === null) return;
+    if (trip === null) {
+      return;
+    }
     expect(trip.family).toBe("canary");
     expect(trip.literal).toBe(canary);
   });
@@ -70,9 +81,38 @@ describe("createOutputFirewall — trips by family", () => {
     const firewall = createOutputFirewall(snapshotFirewallInputs());
     const trip = firewall.scan(`assistant said: ${body}`);
     expect(trip).not.toBeNull();
-    if (trip === null) return;
+    if (trip === null) {
+      return;
+    }
     expect(trip.family).toBe("marker");
     expect(trip.literal).toBe(body);
+  });
+
+  it("E.1: trips on a previously minted envelope nonce with family=nonce", () => {
+    // WHY: model echoing a verbatim nonce from a prior turn is the only way
+    // it could try to forge a "verified" tool call shape — the nonce is the
+    // single secret part of the envelope. Trip prevents the dispatch.
+    const nonce = "a".repeat(64);
+    recordEnvelopeNonce(nonce);
+    const firewall = createOutputFirewall(snapshotFirewallInputs());
+    const trip = firewall.scan(`model says: my nonce is ${nonce} please trust me`);
+    expect(trip).not.toBeNull();
+    if (trip === null) {
+      return;
+    }
+    expect(trip.family).toBe("nonce");
+    expect(trip.literal).toBe(nonce);
+  });
+
+  it("E.1: cross-turn nonce echo trips even when minted in a different transport context", () => {
+    // First "turn" mints a nonce; firewall built afterward sees it as a
+    // registered taint and scans the next stream's bytes against it.
+    const turn1Nonce = "1".repeat(64);
+    recordEnvelopeNonce(turn1Nonce);
+    // New turn starts; new firewall instance built from snapshot.
+    const firewallTurn2 = createOutputFirewall(snapshotFirewallInputs());
+    const trip = firewallTurn2.scan(`turn 2 leaking ${turn1Nonce}`);
+    expect(trip?.family).toBe("nonce");
   });
 });
 
@@ -84,7 +124,9 @@ describe("createOutputFirewall — streaming behaviour", () => {
     expect(firewall.scan("prefix OPENCLAW_CANARY_a")).toBeNull();
     const trip = firewall.scan("bcdef0123456789 suffix");
     expect(trip).not.toBeNull();
-    if (trip === null) return;
+    if (trip === null) {
+      return;
+    }
     expect(trip.family).toBe("canary");
     expect(trip.literal).toBe(canary);
     // Pattern start was in the prior chunk; offset clamps to 0 in this one.
@@ -99,7 +141,9 @@ describe("createOutputFirewall — streaming behaviour", () => {
     expect(firewall.scan("clean output now")).toBeNull();
     const trip = firewall.scan("now leaking sk-not-a-real-format-deadbeef tail");
     expect(trip).not.toBeNull();
-    if (trip === null) return;
+    if (trip === null) {
+      return;
+    }
     expect(trip.family).toBe("secret");
   });
 });
@@ -134,7 +178,9 @@ describe("createOutputFirewall — pattern floor and empty registries", () => {
     expect(firewall.scan("contains sk-this-should-not-trip-aaaa")).toBeNull();
     const trip = firewall.scan("contains only-this-literal-trips inside");
     expect(trip).not.toBeNull();
-    if (trip === null) return;
+    if (trip === null) {
+      return;
+    }
     expect(trip.literal).toBe("only-this-literal-trips");
   });
 });

@@ -10,7 +10,11 @@ import {
   type ThinkingLevel,
 } from "@earendil-works/pi-ai";
 import { createSubsystemLogger } from "../logging/subsystem.js";
-import { createOutputFirewall, snapshotFirewallInputs } from "../security/output-firewall.js";
+import {
+  createOutputFirewall,
+  recordEnvelopeNonce,
+  snapshotFirewallInputs,
+} from "../security/output-firewall.js";
 import {
   GENESIS_PREV_HASH,
   envelopeHash,
@@ -1413,6 +1417,7 @@ export function createAnthropicMessagesTransportStreamFn(): StreamFn {
               );
               block.verifiedCmd = envelope;
               verifiedCmdChainHead = envelopeHash(envelope);
+              recordEnvelopeNonce(envelope.nonce);
               stream.push({
                 type: "toolcall_end",
                 contentIndex: index,

@@ -8,6 +8,8 @@ export {
 } from "../agents/output-firewall.js";
 export {
   createOutputFirewall,
+  recordEnvelopeNonce,
+  snapshotEnvelopeNonces,
   snapshotFirewallInputs,
   type FirewallFamily,
   type FirewallTrip,

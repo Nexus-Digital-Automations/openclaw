@@ -29,7 +29,11 @@ import { redactSensitiveText } from "../logging/redact.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import type { ProviderRuntimeModel } from "../plugins/provider-runtime-model.types.js";
 import { resolveProviderTransportTurnStateWithPlugin } from "../plugins/provider-runtime.js";
-import { createOutputFirewall, snapshotFirewallInputs } from "../security/output-firewall.js";
+import {
+  createOutputFirewall,
+  recordEnvelopeNonce,
+  snapshotFirewallInputs,
+} from "../security/output-firewall.js";
 import {
   envelopeHash,
   GENESIS_PREV_HASH,
@@ -1584,6 +1588,7 @@ async function processResponsesStream(
         // forward only on successful mint, preserving turn order.
         const envelope = mintEnvelope({ name: toolName, args }, "model", verifiedCmdChainHead);
         verifiedCmdChainHead = envelopeHash(envelope);
+        recordEnvelopeNonce(envelope.nonce);
         const finalizedToolCall = {
           type: "toolCall",
           id: `${stringifyUnknown(item.call_id)}|${stringifyUnknown(item.id)}`,

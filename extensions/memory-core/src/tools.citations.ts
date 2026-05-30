@@ -4,6 +4,7 @@ import {
   type OpenClawConfig,
 } from "openclaw/plugin-sdk/memory-core-host-runtime-core";
 import type { MemorySearchResult } from "openclaw/plugin-sdk/memory-core-host-runtime-files";
+import { wrapUntrustedSnippetIfNeeded } from "openclaw/plugin-sdk/security-runtime";
 import { normalizeLowercaseStringOrEmpty } from "openclaw/plugin-sdk/string-coerce-runtime";
 
 export function resolveMemoryCitationsMode(cfg: OpenClawConfig): MemoryCitationsMode {
@@ -19,11 +20,20 @@ export function decorateCitations(
   include: boolean,
 ): MemorySearchResult[] {
   if (!include) {
-    return results.map((entry) => ({ ...entry, citation: undefined }));
+    return results.map((entry) => ({
+      ...entry,
+      citation: undefined,
+      snippet: wrapUntrustedSnippetIfNeeded(entry.snippet, entry.origin, entry.path),
+    }));
   }
   return results.map((entry) => {
     const citation = formatCitation(entry);
-    const snippet = `${entry.snippet.trim()}\n\nSource: ${citation}`;
+    const decoratedSnippet = `${entry.snippet.trim()}\n\nSource: ${citation}`;
+    // Untrusted-zone snippets get sandwiched in external-content markers + canary
+    // so the model treats the bytes as data, not instructions, and the output
+    // firewall trips if the model echoes the canary back. Trusted snippets pass
+    // through verbatim to preserve prompt-cache identity on the hot path.
+    const snippet = wrapUntrustedSnippetIfNeeded(decoratedSnippet, entry.origin, entry.path);
     return { ...entry, citation, snippet };
   });
 }

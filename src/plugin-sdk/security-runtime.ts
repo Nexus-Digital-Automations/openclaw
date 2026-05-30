@@ -23,6 +23,7 @@ export {
   type ResolvedAccessGroupAllowFromState,
 } from "./access-groups.js";
 export * from "../security/external-content.js";
+export * from "../security/memory-origin.js";
 export * from "../security/safe-regex.js";
 export {
   appendRegularFile,

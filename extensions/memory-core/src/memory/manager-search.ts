@@ -4,6 +4,7 @@ import {
   cosineSimilarity,
   parseEmbedding,
 } from "openclaw/plugin-sdk/memory-core-host-engine-storage";
+import type { MemoryOrigin } from "openclaw/plugin-sdk/memory-core-host-runtime-files";
 
 const vectorToBlob = (embedding: number[]): Buffer =>
   Buffer.from(new Float32Array(embedding).buffer);
@@ -23,6 +24,16 @@ function yieldToEventLoop(): Promise<void> {
   });
 }
 
+// Legacy rows (pre-C.1) and FTS hits without a chunks-table match resolve to
+// undefined so decorateCitations passes them through verbatim — matches the
+// "no origin → treat as trusted" rule documented in memory-host-sdk/types.ts.
+function normalizeMemoryOrigin(raw: string | null | undefined): MemoryOrigin | undefined {
+  if (raw === "trusted" || raw === "untrusted") {
+    return raw;
+  }
+  return undefined;
+}
+
 type SearchSource = string;
 
 type SearchRowResult = {
@@ -33,6 +44,11 @@ type SearchRowResult = {
   score: number;
   snippet: string;
   source: SearchSource;
+  // Workspace-zone classification of the chunk's source file. Retrieval-time
+  // wrap (decorateCitations) sandwiches untrusted snippets in external-content
+  // markers; trusted/undefined snippets pass through verbatim for prompt-cache
+  // identity. Absent on legacy rows that pre-date the C.1 migration.
+  origin?: MemoryOrigin;
 };
 
 function normalizeSearchTokens(raw: string): string[] {
@@ -157,7 +173,7 @@ export async function searchVector(params: {
       params.db
         .prepare(
           `SELECT c.id, c.path, c.start_line, c.end_line, c.text,\n` +
-            `       c.source,\n` +
+            `       c.source, c.origin_source,\n` +
             `       vec_distance_cosine(v.embedding, ?) AS dist\n` +
             `  FROM ${params.vectorTable} v\n` +
             `  JOIN chunks c ON c.id = v.id\n` +
@@ -179,6 +195,7 @@ export async function searchVector(params: {
         end_line: number;
         text: string;
         source: SearchSource;
+        origin_source: string | null;
         dist: number;
       }>;
 
@@ -214,6 +231,7 @@ export async function searchVector(params: {
       score: 1 - row.dist,
       snippet: truncateUtf16Safe(row.text, params.snippetMaxChars),
       source: row.source,
+      origin: normalizeMemoryOrigin(row.origin_source),
     }));
   }
 
@@ -242,7 +260,7 @@ async function searchChunksByEmbedding(params: {
   // table, and do not hold a sqlite iterator open across the setImmediate yield
   // below. The rowid cursor keeps memory bounded without OFFSET rescans.
   const stmt = params.db.prepare(
-    `SELECT rowid, id, path, start_line, end_line, text, embedding, source\n` +
+    `SELECT rowid, id, path, start_line, end_line, text, embedding, source, origin_source\n` +
       `  FROM chunks\n` +
       ` WHERE model = ? AND rowid > ?${params.sourceFilter.sql}\n` +
       ` ORDER BY rowid ASC\n` +
@@ -257,6 +275,7 @@ async function searchChunksByEmbedding(params: {
     text: string;
     embedding: string;
     source: SearchSource;
+    origin_source: string | null;
   };
 
   const topResults: SearchRowResult[] = [];
@@ -282,6 +301,7 @@ async function searchChunksByEmbedding(params: {
           score,
           snippet: truncateUtf16Safe(row.text, params.snippetMaxChars),
           source: row.source,
+          origin: normalizeMemoryOrigin(row.origin_source),
         };
         if (topResults.length < params.limit) {
           topResults.push(result);
@@ -415,6 +435,14 @@ export async function searchKeyword(params: {
       ) as typeof rows;
   }
 
+  // FTS shadow table has no origin_source column (avoids a schema migration that
+  // would force every operator to reindex). One bounded post-join keeps the wrap
+  // path honest without paying schema-evolution cost.
+  const originByChunkId = lookupOriginsForChunkIds(
+    params.db,
+    rows.map((row) => row.id),
+  );
+
   return rows.map((row) => {
     const textScore = usedMatch ? params.bm25RankToScore(row.rank) : 1;
     const score = params.boostFallbackRanking
@@ -434,6 +462,25 @@ export async function searchKeyword(params: {
       textScore,
       snippet: truncateUtf16Safe(row.text, params.snippetMaxChars),
       source: row.source,
+      origin: originByChunkId.get(row.id),
     };
   });
+}
+
+function lookupOriginsForChunkIds(
+  db: DatabaseSync,
+  chunkIds: readonly string[],
+): Map<string, MemoryOrigin | undefined> {
+  const result = new Map<string, MemoryOrigin | undefined>();
+  if (chunkIds.length === 0) {
+    return result;
+  }
+  const placeholders = chunkIds.map(() => "?").join(",");
+  const rows = db
+    .prepare(`SELECT id, origin_source FROM chunks WHERE id IN (${placeholders})`)
+    .all(...chunkIds) as Array<{ id: string; origin_source: string | null }>;
+  for (const row of rows) {
+    result.set(row.id, normalizeMemoryOrigin(row.origin_source));
+  }
+  return result;
 }

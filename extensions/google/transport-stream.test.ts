@@ -506,9 +506,8 @@ describe("google transport stream", () => {
   });
 
   it("mints chained verified-cmd envelopes across two Google function calls in a turn", async () => {
-    const { envelopeHash, GENESIS_PREV_HASH } = await import(
-      "openclaw/plugin-sdk/provider-transport-runtime"
-    );
+    const { envelopeHash, GENESIS_PREV_HASH } =
+      await import("openclaw/plugin-sdk/provider-transport-runtime");
     guardedFetchMock.mockResolvedValueOnce(
       buildSseResponse([
         {
@@ -555,13 +554,12 @@ describe("google transport stream", () => {
     );
     const result = await stream.result();
 
-    const toolCalls = result.content.filter(
-      (block): block is Record<string, unknown> & { verifiedCmd?: Record<string, unknown> } =>
-        (block as { type?: string }).type === "toolCall",
-    );
+    const toolCalls = result.content
+      .filter((block) => (block as { type?: string }).type === "toolCall")
+      .map((block) => block as unknown as { verifiedCmd?: Record<string, unknown> });
     expect(toolCalls).toHaveLength(2);
-    const firstEnv = toolCalls[0].verifiedCmd;
-    const secondEnv = toolCalls[1].verifiedCmd;
+    const firstEnv = toolCalls[0]?.verifiedCmd;
+    const secondEnv = toolCalls[1]?.verifiedCmd;
     if (!firstEnv || !secondEnv) {
       throw new Error("expected verifiedCmd envelope on both Google toolCall blocks");
     }

@@ -11,7 +11,7 @@ import {
   type SessionEntry as StoredSessionEntry,
 } from "../config/sessions.js";
 import { diagnosticLogger as diag } from "../logging/diagnostic.js";
-import { purifyParsedTranscriptEntries } from "../security/context-purification.js";
+import { maybePurifySessionEntries } from "../security/maybe-purify-session-entries.js";
 
 export function resolveBtwSessionTranscriptPath(params: {
   sessionId: string;
@@ -150,40 +150,4 @@ export async function readBtwTranscriptMessages(params: {
   } catch {
     return [];
   }
-}
-
-// D.3 — purification wire-up. Consults the gate via priorCorrelationId; on
-// touch, rewrites the text content of each entry. Pi's SessionEntry shape
-// is owned upstream and varies by entry type — for safe in-memory rewrite
-// we round-trip each entry through JSON, replace its serialized form with
-// the sanitized line, and re-parse. Entries whose post-rewrite shape no
-// longer parses as JSON fall back to the original (fail-open per the
-// purifier's defense-in-depth posture).
-async function maybePurifySessionEntries(
-  entries: PiSessionEntry[],
-  priorCorrelationId: string | undefined,
-  sessionId: string,
-): Promise<PiSessionEntry[]> {
-  if (!priorCorrelationId || entries.length === 0) {
-    return entries;
-  }
-  const verdict = await purifyParsedTranscriptEntries<PiSessionEntry>({
-    entries,
-    priorCorrelationId,
-    getContent: (entry) => JSON.stringify(entry),
-    setContent: (original, sanitized) => {
-      try {
-        return JSON.parse(sanitized) as PiSessionEntry;
-      } catch {
-        return original;
-      }
-    },
-  });
-  if (!verdict.purified) {
-    return entries;
-  }
-  diag.debug(
-    `btw transcript purified: sessionId=${sessionId} corr=${priorCorrelationId} removed=${verdict.removedCount}`,
-  );
-  return verdict.entries;
 }

@@ -17,7 +17,11 @@ import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
 import { resolveProviderAuthProfileId } from "../../plugins/provider-runtime.js";
 import { enqueueCommandInLane } from "../../process/command-queue.js";
 import type { CommandQueueEnqueueOptions } from "../../process/command-queue.types.js";
-import { setExternalContentTouchScope } from "../../shared/process-external-content-bodies.js";
+import { markCorrelationTainted } from "../../security/context-taint-store.js";
+import {
+  didCorrelationTouchExternalContent,
+  setExternalContentTouchScope,
+} from "../../shared/process-external-content-bodies.js";
 import { normalizeOptionalString } from "../../shared/string-coerce.js";
 import { createAgentHarnessTaskRuntimeScope } from "../../tasks/agent-harness-task-runtime-scope.js";
 import { sanitizeForLog } from "../../terminal/ansi.js";
@@ -122,6 +126,7 @@ import {
   type PostCompactionGuardObservation,
 } from "./post-compaction-loop-guard.js";
 import { createEmbeddedRunReplayState, observeReplayMetadata } from "./replay-state.js";
+import { setPriorRunCorrelationId } from "./run-state.js";
 import { handleAssistantFailover } from "./run/assistant-failover.js";
 import {
   createEmbeddedRunStageTracker,
@@ -3349,6 +3354,29 @@ export async function runEmbeddedPiAgent(
           };
         }
       } finally {
+        // D.6 — close out the taint scope opened in D.5. If this turn touched
+        // untrusted content, persist the verdict to the cross-restart taint
+        // store and record the correlationId as the session's "previous turn"
+        // so the next turn's consumers (D.7) can query it.
+        if (params.runId) {
+          const touched = didCorrelationTouchExternalContent(params.runId);
+          setExternalContentTouchScope(undefined);
+          if (touched) {
+            try {
+              await markCorrelationTainted(params.runId);
+            } catch (taintErr) {
+              log.warn?.("[security] failed to persist tainted correlationId", {
+                runId: params.runId,
+                errorMessage: formatErrorMessage(taintErr),
+              });
+            }
+          }
+          if (params.sessionId) {
+            setPriorRunCorrelationId(params.sessionId, params.runId);
+          }
+        } else {
+          setExternalContentTouchScope(undefined);
+        }
         forgetPromptBuildDrainCacheForRun(params.runId);
         stopRuntimeAuthRefreshTimer();
         await runAgentCleanupStep({

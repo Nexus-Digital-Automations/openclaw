@@ -158,6 +158,14 @@
       "types": "./dist/plugin-sdk/proxy-capture.d.ts",
       "default": "./dist/plugin-sdk/proxy-capture.js"
     },
+    "./plugin-sdk/http-guard-runtime": {
+      "types": "./dist/plugin-sdk/http-guard-runtime.d.ts",
+      "default": "./dist/plugin-sdk/http-guard-runtime.js"
+    },
+    "./plugin-sdk/fs-guard-runtime": {
+      "types": "./dist/plugin-sdk/fs-guard-runtime.d.ts",
+      "default": "./dist/plugin-sdk/fs-guard-runtime.js"
+    },
     "./plugin-sdk/runtime-secret-resolution": {
       "types": "./dist/plugin-sdk/runtime-secret-resolution.d.ts",
       "default": "./dist/plugin-sdk/runtime-secret-resolution.js"

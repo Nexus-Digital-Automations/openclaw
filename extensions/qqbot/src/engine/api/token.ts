@@ -6,10 +6,12 @@
  * globals, fully supporting multi-account concurrent operation.
  */
 
+import { pluginFetch } from "openclaw/plugin-sdk/http-guard-runtime";
 import type { EngineLogger } from "../types.js";
 import { formatErrorMessage } from "../utils/format.js";
 
 const TOKEN_URL = "https://bots.qq.com/app/getAppAccessToken";
+const QQBOT_PLUGIN_ID = "qqbot";
 
 interface CachedToken {
   token: string;
@@ -208,13 +210,17 @@ export class TokenManager {
 
     let response: Response;
     try {
-      response = await fetch(TOKEN_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "User-Agent": this.resolveUserAgent(),
+      response = await pluginFetch({
+        pluginId: QQBOT_PLUGIN_ID,
+        input: TOKEN_URL,
+        init: {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "User-Agent": this.resolveUserAgent(),
+          },
+          body: JSON.stringify({ appId, clientSecret }),
         },
-        body: JSON.stringify({ appId, clientSecret }),
       });
     } catch (err) {
       this.logger?.error?.(`[qqbot:token:${appId}] Network error: ${formatErrorMessage(err)}`);

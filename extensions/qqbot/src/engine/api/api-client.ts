@@ -9,10 +9,12 @@
  * - `redactBodyKeys` replaces the hardcoded `file_data` redaction.
  */
 
+import { pluginFetch } from "openclaw/plugin-sdk/http-guard-runtime";
 import { ApiError, type ApiClientConfig, type EngineLogger } from "../types.js";
 import { formatErrorMessage } from "../utils/format.js";
 
 const DEFAULT_BASE_URL = "https://api.sgroup.qq.com";
+const QQBOT_PLUGIN_ID = "qqbot";
 const DEFAULT_TIMEOUT_MS = 30_000;
 const FILE_UPLOAD_TIMEOUT_MS = 120_000;
 
@@ -121,7 +123,7 @@ export class ApiClient {
 
     let res: Response;
     try {
-      res = await fetch(url, fetchInit);
+      res = await pluginFetch({ pluginId: QQBOT_PLUGIN_ID, input: url, init: fetchInit });
     } catch (err) {
       clearTimeout(timeoutId);
       if (err instanceof Error && err.name === "AbortError") {

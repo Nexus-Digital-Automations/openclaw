@@ -1,7 +1,8 @@
 {
   "id": "qqbot",
   "capabilities": {
-    "hooks": []
+    "hooks": [],
+    "httpAllowlist": ["bots.qq.com", "api.sgroup.qq.com"]
   },
   "activation": {
     "onStartup": false

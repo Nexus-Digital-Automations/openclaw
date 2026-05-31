@@ -27,9 +27,11 @@
  * @stable
  */
 
+import { randomUUID } from "node:crypto";
 import { invokeInternalJudge, type JudgeResponse } from "../agents/internal-judge.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { didCorrelationTouchExternalContent } from "../shared/process-external-content-bodies.js";
+import { tryAppendAuditEntry } from "./audit-chain.js";
 import { wasCorrelationTainted } from "./context-taint-store.js";
 
 const log = createSubsystemLogger("context-purification");
@@ -191,6 +193,20 @@ function interpretJudgeResponse(
     judge_model: judgeResponse.modelId,
     latency_ms: judgeResponse.latencyMs,
     correlation_id: input.correlationId,
+  });
+  // D.4 — append to the hash-chained audit log so operators can replay every
+  // purification firing with cryptographic tamper-evidence, not just JSON
+  // log lines that any process with write access could backdate.
+  tryAppendAuditEntry({
+    entryId: randomUUID(),
+    toolName: "context_purification",
+    argv: {
+      correlationId: input.correlationId ?? null,
+      sanitizedCount: judgeResponse.output.sanitized.length,
+      removedCount,
+      judgeModel: judgeResponse.modelId,
+      latencyMs: judgeResponse.latencyMs,
+    },
   });
   return {
     purified: true,

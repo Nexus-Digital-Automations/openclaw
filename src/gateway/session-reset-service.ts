@@ -42,6 +42,7 @@ import {
   normalizeAgentId,
   parseAgentSessionKey,
 } from "../routing/session-key.js";
+import { clearSessionSecrets } from "../security/session-secret-isolation.js";
 import {
   forgetActiveSessionForShutdown,
   listActiveSessionsForShutdown,
@@ -400,6 +401,21 @@ async function ensureSessionRuntimeCleanup(params: {
         );
       },
     });
+    // G.3 residency reduction: the session is fully torn down, so its
+    // session-scoped resolved secrets must not outlive it. Evict only on the
+    // confirmed-ended path — the still-active branch below keeps them.
+    const evictedSecretCount = clearSessionSecrets(params.sessionId);
+    if (evictedSecretCount > 0) {
+      logVerbose(
+        JSON.stringify({
+          event: "secret.session.evicted",
+          level: "info",
+          sessionId: params.sessionId,
+          evictedSecretCount,
+          reason: "gateway-session-cleanup",
+        }),
+      );
+    }
     await closeTrackedBrowserTabs();
     return undefined;
   }

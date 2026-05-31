@@ -1,6 +1,9 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import { pluginFetch } from "openclaw/plugin-sdk/http-guard-runtime";
 import { generatePkceVerifierChallenge, toFormUrlEncoded } from "openclaw/plugin-sdk/provider-auth";
 import { ensureGlobalUndiciEnvProxyDispatcher } from "openclaw/plugin-sdk/runtime-env";
+
+const MINIMAX_PLUGIN_ID = "minimax";
 
 export type MiniMaxRegion = "cn" | "global";
 
@@ -63,21 +66,25 @@ async function requestOAuthCode(params: {
   region: MiniMaxRegion;
 }): Promise<MiniMaxOAuthAuthorization> {
   const endpoints = getOAuthEndpoints(params.region);
-  const response = await fetch(endpoints.codeEndpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Accept: "application/json",
-      "x-request-id": randomUUID(),
+  const response = await pluginFetch({
+    pluginId: MINIMAX_PLUGIN_ID,
+    input: endpoints.codeEndpoint,
+    init: {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+        "x-request-id": randomUUID(),
+      },
+      body: toFormUrlEncoded({
+        response_type: "code",
+        client_id: endpoints.clientId,
+        scope: MINIMAX_OAUTH_SCOPE,
+        code_challenge: params.challenge,
+        code_challenge_method: "S256",
+        state: params.state,
+      }),
     },
-    body: toFormUrlEncoded({
-      response_type: "code",
-      client_id: endpoints.clientId,
-      scope: MINIMAX_OAUTH_SCOPE,
-      code_challenge: params.challenge,
-      code_challenge_method: "S256",
-      state: params.state,
-    }),
   });
 
   if (!response.ok) {
@@ -104,18 +111,22 @@ async function pollOAuthToken(params: {
   region: MiniMaxRegion;
 }): Promise<TokenResult> {
   const endpoints = getOAuthEndpoints(params.region);
-  const response = await fetch(endpoints.tokenEndpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Accept: "application/json",
+  const response = await pluginFetch({
+    pluginId: MINIMAX_PLUGIN_ID,
+    input: endpoints.tokenEndpoint,
+    init: {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body: toFormUrlEncoded({
+        grant_type: MINIMAX_OAUTH_GRANT_TYPE,
+        client_id: endpoints.clientId,
+        user_code: params.userCode,
+        code_verifier: params.verifier,
+      }),
     },
-    body: toFormUrlEncoded({
-      grant_type: MINIMAX_OAUTH_GRANT_TYPE,
-      client_id: endpoints.clientId,
-      user_code: params.userCode,
-      code_verifier: params.verifier,
-    }),
   });
 
   const text = await response.text();

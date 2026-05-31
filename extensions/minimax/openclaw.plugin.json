@@ -2,10 +2,8 @@
   "id": "minimax",
   "capabilities": {
     "hooks": [],
-    "providers": [
-      "minimax",
-      "minimax-portal"
-    ]
+    "providers": ["minimax", "minimax-portal"],
+    "httpAllowlist": ["api.minimaxi.com", "api.minimax.io"]
   },
   "activation": {
     "onStartup": false

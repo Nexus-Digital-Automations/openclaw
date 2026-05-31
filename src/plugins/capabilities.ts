@@ -19,6 +19,19 @@
  * @stable
  */
 
+// C.3 part 2 — declarable hook surface. Plugins state which of these
+// they will attach to so the runtime gate can refuse undeclared
+// attachments. The 7 original names cover prompt/tool/session
+// boundaries; the additional names cover compaction, model I/O,
+// message dispatch, agent lifecycle, and subagent lifecycle —
+// behavior-bearing hooks that previously escaped the declared
+// surface even though plugins attaching to them affect user-visible
+// behavior or model context. Excluded by design: sync-write
+// integration hooks (tool_result_persist, before_message_write),
+// gateway lifecycle (gateway_start/stop, deactivate), pure
+// instrumentation (heartbeat_prompt_contribution). Claim-style
+// hooks dispatched through runClaimingHook are excluded until the
+// gate is wired at that dispatch seam.
 export type PluginHookName =
   | "before_prompt_build"
   | "before_tool_call"
@@ -26,7 +39,21 @@ export type PluginHookName =
   | "post_tool_result"
   | "post_message_send"
   | "session_start"
-  | "session_end";
+  | "session_end"
+  | "before_compaction"
+  | "after_compaction"
+  | "before_reset"
+  | "message_received"
+  | "message_sent"
+  | "after_tool_call"
+  | "agent_end"
+  | "llm_input"
+  | "llm_output"
+  | "model_call_started"
+  | "model_call_ended"
+  | "subagent_spawned"
+  | "subagent_ended"
+  | "cron_changed";
 
 export type PluginFsScope =
   | "workspace.read"
@@ -237,6 +264,20 @@ const HOOK_NAMES: ReadonlySet<PluginHookName> = new Set([
   "post_message_send",
   "session_start",
   "session_end",
+  "before_compaction",
+  "after_compaction",
+  "before_reset",
+  "message_received",
+  "message_sent",
+  "after_tool_call",
+  "agent_end",
+  "llm_input",
+  "llm_output",
+  "model_call_started",
+  "model_call_ended",
+  "subagent_spawned",
+  "subagent_ended",
+  "cron_changed",
 ]);
 
 const FS_SCOPES: ReadonlySet<PluginFsScope> = new Set([

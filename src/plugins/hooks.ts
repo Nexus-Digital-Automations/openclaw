@@ -253,11 +253,16 @@ export type PluginTargetedInboundClaimOutcome =
       error: string;
     };
 
-// C.3 — declared-surface hook names (subset of the PluginHookName union
-// that capability manifests can name). Hooks outside this set never go
-// through the capability gate (e.g. tool_result_persist, before_message_write
-// are sync-write integration hooks, not behavior hooks). Keep in sync with
-// capabilities.ts PluginHookName.
+// C.3 — declared-surface hook names. Subset of hook-types.ts:68
+// PluginHookName that capability manifests can name (= capabilities.ts:22
+// PluginHookName). Hooks outside this set never go through the capability
+// gate by design: sync-write integration hooks (tool_result_persist,
+// before_message_write), gateway lifecycle hooks (gateway_start/stop,
+// deactivate), pure instrumentation (heartbeat_prompt_contribution), and
+// claim-style hooks dispatched through runClaimingHook (the gate is wired
+// only at runVoidHook today). Keep in lockstep with capabilities.ts
+// PluginHookName + HOOK_NAMES; the test "DECLARED_HOOK_NAMES matches
+// capabilities.ts PluginHookName" catches drift.
 const DECLARED_HOOK_NAMES = new Set<string>([
   "before_prompt_build",
   "before_tool_call",
@@ -266,6 +271,20 @@ const DECLARED_HOOK_NAMES = new Set<string>([
   "post_message_send",
   "session_start",
   "session_end",
+  "before_compaction",
+  "after_compaction",
+  "before_reset",
+  "message_received",
+  "message_sent",
+  "after_tool_call",
+  "agent_end",
+  "llm_input",
+  "llm_output",
+  "model_call_started",
+  "model_call_ended",
+  "subagent_spawned",
+  "subagent_ended",
+  "cron_changed",
 ]);
 
 // Per-process counter for the warn-mode telemetry. Operators reading the

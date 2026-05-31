@@ -102,9 +102,33 @@ export function refuseCrossSessionRead(ownerSessionId: string, requesterSessionI
 }
 
 /**
- * Wipe every session's bucket. Tests only — production callers must not
- * use this; a stale per-session literal staying in the registry is
- * strictly safer than dropping one early.
+ * Evict a single ended session's bucket. Unlike the process-wide registry
+ * (whose literals intentionally live for the process lifetime), a session's
+ * resolved secrets must not outlive the session — that is the point of
+ * residency reduction. Call this from session-end teardown once the session
+ * can no longer produce output that would need redaction.
+ *
+ * Returns the number of literals evicted (0 for an unknown session) so the
+ * caller can emit an accurate telemetry count. No-ops on an empty sessionId.
+ *
+ * @stable
+ */
+export function clearSessionSecrets(sessionId: string): number {
+  if (typeof sessionId !== "string" || sessionId.length === 0) {
+    return 0;
+  }
+  const bucket = sessionSecretLiterals.get(sessionId);
+  if (!bucket) {
+    return 0;
+  }
+  const evicted = bucket.size;
+  sessionSecretLiterals.delete(sessionId);
+  return evicted;
+}
+
+/**
+ * Wipe every session's bucket. Tests only — production callers must use
+ * `clearSessionSecrets(sessionId)` for a specific ended session instead.
  *
  * @internal
  */

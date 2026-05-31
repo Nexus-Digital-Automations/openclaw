@@ -8,6 +8,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
   CrossSessionSecretReadError,
+  clearSessionSecrets,
   clearSessionSecretsForTests,
   recordSessionSecret,
   refuseCrossSessionRead,
@@ -82,6 +83,30 @@ describe("session-secret-isolation — refuseCrossSessionRead", () => {
       expect(typed.ownerSessionId).toBe("session-a");
       expect(typed.requesterSessionId).toBe("session-b");
     }
+  });
+});
+
+describe("session-secret-isolation — clearSessionSecrets (residency eviction)", () => {
+  it("evicts the session bucket and returns the evicted count", () => {
+    recordSessionSecret("session-a", "secret-A1");
+    recordSessionSecret("session-a", "secret-A2");
+
+    expect(clearSessionSecrets("session-a")).toBe(2);
+    expect(snapshotSessionSecrets("session-a")).toEqual([]);
+  });
+
+  it("returns 0 for an unknown session and for an empty id", () => {
+    expect(clearSessionSecrets("never-seen")).toBe(0);
+    expect(clearSessionSecrets("")).toBe(0);
+  });
+
+  it("evicts only the named session, leaving other buckets intact", () => {
+    recordSessionSecret("session-a", "alpha");
+    recordSessionSecret("session-b", "beta");
+
+    expect(clearSessionSecrets("session-a")).toBe(1);
+    expect(snapshotSessionSecrets("session-a")).toEqual([]);
+    expect(snapshotSessionSecrets("session-b")).toEqual(["beta"]);
   });
 });
 

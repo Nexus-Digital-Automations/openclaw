@@ -279,11 +279,12 @@ function recordCapabilityViolation(pluginId: string, hookName: string, seam: str
 }
 
 /**
- * C.3 warn-mode capability gate. Returns true when the hook is permitted
+ * C.6 strict-mode capability gate. Returns true when the hook is permitted
  * to fire (declared OR not in the declared-surface vocabulary OR plugin
- * has no manifest yet — grandfather), false-with-warn when the plugin
- * declared a surface that excludes this hook. Warn-mode never blocks;
- * the strict-mode flip (C.6) converts false return → throw.
+ * has no manifest yet — grandfather). Throws CapabilityDeniedError when
+ * the plugin declared a surface that excludes this hook — the C.6 flip
+ * from C.3's warn-only behavior. Plugins without manifests still
+ * grandfather through, matching the pre-C.6 telemetry semantics.
  *
  * @stable
  */
@@ -308,7 +309,7 @@ function passesCapabilityGateOrWarn(
   recordCapabilityViolation(pluginId, hookName, seam);
   logger?.warn?.(
     JSON.stringify({
-      event: "plugin.capability.violation_observed",
+      event: "plugin.capability.denied",
       pluginId,
       hookName,
       seam,
@@ -316,7 +317,47 @@ function passesCapabilityGateOrWarn(
       declared: capabilities.hooks ?? [],
     }),
   );
-  return true;
+  throw new CapabilityDeniedError({
+    pluginId,
+    hookName,
+    seam,
+    reason: verdict.reason,
+    declared: capabilities.hooks ?? [],
+  });
+}
+
+/**
+ * Thrown by the C.6 strict-mode capability gate when a plugin attempts to
+ * fire a hook that its signed manifest does not declare. Carries the
+ * forensic fields the audit-chain entry would normally hold so callers
+ * that catch the error can surface them without re-deriving.
+ *
+ * @stable
+ */
+export class CapabilityDeniedError extends Error {
+  readonly pluginId: string;
+  readonly hookName: string;
+  readonly seam: string;
+  readonly reason: string;
+  readonly declared: ReadonlyArray<string>;
+
+  constructor(input: {
+    pluginId: string;
+    hookName: string;
+    seam: string;
+    reason: string;
+    declared: ReadonlyArray<string>;
+  }) {
+    super(
+      `plugin "${input.pluginId}" hook "${input.hookName}" refused at ${input.seam}: ${input.reason}`,
+    );
+    this.name = "CapabilityDeniedError";
+    this.pluginId = input.pluginId;
+    this.hookName = input.hookName;
+    this.seam = input.seam;
+    this.reason = input.reason;
+    this.declared = input.declared;
+  }
 }
 
 // Test-only: drive the gate directly. Production code paths invoke the

@@ -20,6 +20,7 @@ import {
   setPluginCapabilities,
 } from "./capabilities.js";
 import {
+  CapabilityDeniedError,
   passesCapabilityGateOrWarnForTests,
   resetCapabilityViolationsForTests,
   snapshotCapabilityViolationsForTests,
@@ -81,19 +82,20 @@ describe("passesCapabilityGateOrWarn — declared-hook match", () => {
     expect(snapshotCapabilityViolationsForTests().size).toBe(0);
   });
 
-  it("emits warn + records counter when the hook is undeclared", () => {
+  it("throws CapabilityDeniedError + emits warn + records counter when the hook is undeclared", () => {
     setPluginCapabilities(PLUGIN_ID, { hooks: ["before_prompt_build"] });
     const warn = vi.fn();
-    const allowed = passesCapabilityGateOrWarnForTests(
-      PLUGIN_ID,
-      "before_tool_call",
-      { warn },
-      { seam: "runVoidHook" },
-    );
-    expect(allowed).toBe(true);
+    expect(() =>
+      passesCapabilityGateOrWarnForTests(
+        PLUGIN_ID,
+        "before_tool_call",
+        { warn },
+        { seam: "runVoidHook" },
+      ),
+    ).toThrow(CapabilityDeniedError);
     expect(warn).toHaveBeenCalledTimes(1);
     const payload = JSON.parse(warn.mock.calls[0][0]);
-    expect(payload.event).toBe("plugin.capability.violation_observed");
+    expect(payload.event).toBe("plugin.capability.denied");
     expect(payload.pluginId).toBe(PLUGIN_ID);
     expect(payload.hookName).toBe("before_tool_call");
     expect(payload.seam).toBe("runVoidHook");
@@ -102,15 +104,17 @@ describe("passesCapabilityGateOrWarn — declared-hook match", () => {
 });
 
 describe("passesCapabilityGateOrWarn — per-seam telemetry", () => {
-  it("composes the counter key from pluginId::hookName::seam", () => {
+  it("composes the counter key from pluginId::hookName::seam (throw still records)", () => {
     setPluginCapabilities(PLUGIN_ID, { hooks: ["before_prompt_build"] });
     const warn = vi.fn();
-    passesCapabilityGateOrWarnForTests(
-      PLUGIN_ID,
-      "before_tool_call",
-      { warn },
-      { seam: "runVoidHook" },
-    );
+    expect(() =>
+      passesCapabilityGateOrWarnForTests(
+        PLUGIN_ID,
+        "before_tool_call",
+        { warn },
+        { seam: "runVoidHook" },
+      ),
+    ).toThrow(CapabilityDeniedError);
     const counters = snapshotCapabilityViolationsForTests();
     expect(counters.get(`${PLUGIN_ID}::before_tool_call::runVoidHook`)).toBe(1);
   });
@@ -118,7 +122,9 @@ describe("passesCapabilityGateOrWarn — per-seam telemetry", () => {
   it("defaults the seam label to runVoidHook when omitted", () => {
     setPluginCapabilities(PLUGIN_ID, { hooks: ["before_prompt_build"] });
     const warn = vi.fn();
-    passesCapabilityGateOrWarnForTests(PLUGIN_ID, "before_tool_call", { warn });
+    expect(() =>
+      passesCapabilityGateOrWarnForTests(PLUGIN_ID, "before_tool_call", { warn }),
+    ).toThrow(CapabilityDeniedError);
     const counters = snapshotCapabilityViolationsForTests();
     expect(counters.get(`${PLUGIN_ID}::before_tool_call::runVoidHook`)).toBe(1);
     const payload = JSON.parse(warn.mock.calls[0][0]);
@@ -128,18 +134,22 @@ describe("passesCapabilityGateOrWarn — per-seam telemetry", () => {
   it("tracks distinct counter keys per seam for the same hook violation", () => {
     setPluginCapabilities(PLUGIN_ID, { hooks: ["before_prompt_build"] });
     const warn = vi.fn();
-    passesCapabilityGateOrWarnForTests(
-      PLUGIN_ID,
-      "before_tool_call",
-      { warn },
-      { seam: "runVoidHook" },
-    );
-    passesCapabilityGateOrWarnForTests(
-      PLUGIN_ID,
-      "before_tool_call",
-      { warn },
-      { seam: "runClaimingHooksList" },
-    );
+    expect(() =>
+      passesCapabilityGateOrWarnForTests(
+        PLUGIN_ID,
+        "before_tool_call",
+        { warn },
+        { seam: "runVoidHook" },
+      ),
+    ).toThrow(CapabilityDeniedError);
+    expect(() =>
+      passesCapabilityGateOrWarnForTests(
+        PLUGIN_ID,
+        "before_tool_call",
+        { warn },
+        { seam: "runClaimingHooksList" },
+      ),
+    ).toThrow(CapabilityDeniedError);
     const counters = snapshotCapabilityViolationsForTests();
     expect(counters.get(`${PLUGIN_ID}::before_tool_call::runVoidHook`)).toBe(1);
     expect(counters.get(`${PLUGIN_ID}::before_tool_call::runClaimingHooksList`)).toBe(1);
@@ -147,37 +157,43 @@ describe("passesCapabilityGateOrWarn — per-seam telemetry", () => {
 });
 
 describe("passesCapabilityGateOrWarn — expanded behavior-hook surface", () => {
-  it("emits when a manifest excludes before_compaction (newly gated in C.3.c2)", () => {
+  it("throws when a manifest excludes before_compaction (newly gated in C.3.c2)", () => {
     setPluginCapabilities(PLUGIN_ID, { hooks: ["before_prompt_build"] });
     const warn = vi.fn();
-    passesCapabilityGateOrWarnForTests(
-      PLUGIN_ID,
-      "before_compaction",
-      { warn },
-      { seam: "runVoidHook" },
-    );
+    expect(() =>
+      passesCapabilityGateOrWarnForTests(
+        PLUGIN_ID,
+        "before_compaction",
+        { warn },
+        { seam: "runVoidHook" },
+      ),
+    ).toThrow(CapabilityDeniedError);
     expect(warn).toHaveBeenCalledTimes(1);
     expect(
       snapshotCapabilityViolationsForTests().get(`${PLUGIN_ID}::before_compaction::runVoidHook`),
     ).toBe(1);
   });
 
-  it("emits when a manifest excludes llm_input", () => {
+  it("throws when a manifest excludes llm_input", () => {
     setPluginCapabilities(PLUGIN_ID, { hooks: ["session_start"] });
     const warn = vi.fn();
-    passesCapabilityGateOrWarnForTests(PLUGIN_ID, "llm_input", { warn }, { seam: "runVoidHook" });
+    expect(() =>
+      passesCapabilityGateOrWarnForTests(PLUGIN_ID, "llm_input", { warn }, { seam: "runVoidHook" }),
+    ).toThrow(CapabilityDeniedError);
     expect(warn).toHaveBeenCalledTimes(1);
   });
 
-  it("emits when a manifest excludes message_sent", () => {
+  it("throws when a manifest excludes message_sent", () => {
     setPluginCapabilities(PLUGIN_ID, { hooks: ["session_end"] });
     const warn = vi.fn();
-    passesCapabilityGateOrWarnForTests(
-      PLUGIN_ID,
-      "message_sent",
-      { warn },
-      { seam: "runVoidHook" },
-    );
+    expect(() =>
+      passesCapabilityGateOrWarnForTests(
+        PLUGIN_ID,
+        "message_sent",
+        { warn },
+        { seam: "runVoidHook" },
+      ),
+    ).toThrow(CapabilityDeniedError);
     expect(warn).toHaveBeenCalledTimes(1);
   });
 });

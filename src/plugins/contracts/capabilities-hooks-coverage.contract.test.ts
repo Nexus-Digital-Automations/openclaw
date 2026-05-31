@@ -66,17 +66,11 @@ async function loadBundledPluginManifestStates(): Promise<ManifestState[]> {
   return states;
 }
 
-describe("capabilities.hooks coverage — advisory until C.4 backfill clears", () => {
-  it("reports the bundled-plugin coverage state without failing", async () => {
+describe("capabilities.hooks coverage — enforcing post-C.4 backfill", () => {
+  it("requires every bundled plugin manifest to declare capabilities.hooks", async () => {
     const states = await loadBundledPluginManifestStates();
-    const totals = {
-      total: states.length,
-      declaring: states.filter((entry) => Array.isArray(entry.declaredHooks)).length,
-      missing: states.filter((entry) => entry.declaredHooks === "missing").length,
-    };
-    console.log(
-      `[C.5 advisory] capabilities.hooks coverage: ${totals.declaring}/${totals.total} plugins declare, ${totals.missing} missing (C.6 flip converts to assert)`,
-    );
-    expect(totals.total).toBeGreaterThan(0);
+    const missing = states.filter((entry) => entry.declaredHooks === "missing");
+    expect(missing).toEqual([]);
+    expect(states.length).toBeGreaterThan(0);
   });
 });

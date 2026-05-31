@@ -1,12 +1,23 @@
 {
   "id": "comfy",
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "comfy"
+    ]
+  },
   "activation": {
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["comfy"],
+  "providers": [
+    "comfy"
+  ],
   "providerAuthEnvVars": {
-    "comfy": ["COMFY_API_KEY", "COMFY_CLOUD_API_KEY"]
+    "comfy": [
+      "COMFY_API_KEY",
+      "COMFY_CLOUD_API_KEY"
+    ]
   },
   "providerAuthChoices": [
     {
@@ -22,13 +33,21 @@
       "cliFlag": "--comfy-api-key",
       "cliOption": "--comfy-api-key <key>",
       "cliDescription": "Comfy Cloud API key",
-      "onboardingScopes": ["image-generation"]
+      "onboardingScopes": [
+        "image-generation"
+      ]
     }
   ],
   "contracts": {
-    "imageGenerationProviders": ["comfy"],
-    "musicGenerationProviders": ["comfy"],
-    "videoGenerationProviders": ["comfy"]
+    "imageGenerationProviders": [
+      "comfy"
+    ],
+    "musicGenerationProviders": [
+      "comfy"
+    ],
+    "videoGenerationProviders": [
+      "comfy"
+    ]
   },
   "imageGenerationProviderMetadata": {
     "comfy": {
@@ -39,10 +58,17 @@
           "mode": {
             "path": "mode",
             "default": "local",
-            "allowed": ["local"]
+            "allowed": [
+              "local"
+            ]
           },
-          "requiredAny": ["workflow", "workflowPath"],
-          "required": ["promptNodeId"]
+          "requiredAny": [
+            "workflow",
+            "workflowPath"
+          ],
+          "required": [
+            "promptNodeId"
+          ]
         },
         {
           "rootPath": "models.providers.comfy",
@@ -50,30 +76,53 @@
           "mode": {
             "path": "mode",
             "default": "local",
-            "allowed": ["local"]
+            "allowed": [
+              "local"
+            ]
           },
-          "requiredAny": ["workflow", "workflowPath"],
-          "required": ["promptNodeId"]
+          "requiredAny": [
+            "workflow",
+            "workflowPath"
+          ],
+          "required": [
+            "promptNodeId"
+          ]
         },
         {
           "rootPath": "plugins.entries.comfy.config",
           "overlayPath": "image",
           "mode": {
             "path": "mode",
-            "allowed": ["cloud"]
+            "allowed": [
+              "cloud"
+            ]
           },
-          "requiredAny": ["workflow", "workflowPath"],
-          "required": ["promptNodeId", "apiKey"]
+          "requiredAny": [
+            "workflow",
+            "workflowPath"
+          ],
+          "required": [
+            "promptNodeId",
+            "apiKey"
+          ]
         },
         {
           "rootPath": "models.providers.comfy",
           "overlayPath": "image",
           "mode": {
             "path": "mode",
-            "allowed": ["cloud"]
+            "allowed": [
+              "cloud"
+            ]
           },
-          "requiredAny": ["workflow", "workflowPath"],
-          "required": ["promptNodeId", "apiKey"]
+          "requiredAny": [
+            "workflow",
+            "workflowPath"
+          ],
+          "required": [
+            "promptNodeId",
+            "apiKey"
+          ]
         }
       ]
     }
@@ -87,10 +136,17 @@
           "mode": {
             "path": "mode",
             "default": "local",
-            "allowed": ["local"]
+            "allowed": [
+              "local"
+            ]
           },
-          "requiredAny": ["workflow", "workflowPath"],
-          "required": ["promptNodeId"]
+          "requiredAny": [
+            "workflow",
+            "workflowPath"
+          ],
+          "required": [
+            "promptNodeId"
+          ]
         },
         {
           "rootPath": "models.providers.comfy",
@@ -98,30 +154,53 @@
           "mode": {
             "path": "mode",
             "default": "local",
-            "allowed": ["local"]
+            "allowed": [
+              "local"
+            ]
           },
-          "requiredAny": ["workflow", "workflowPath"],
-          "required": ["promptNodeId"]
+          "requiredAny": [
+            "workflow",
+            "workflowPath"
+          ],
+          "required": [
+            "promptNodeId"
+          ]
         },
         {
           "rootPath": "plugins.entries.comfy.config",
           "overlayPath": "music",
           "mode": {
             "path": "mode",
-            "allowed": ["cloud"]
+            "allowed": [
+              "cloud"
+            ]
           },
-          "requiredAny": ["workflow", "workflowPath"],
-          "required": ["promptNodeId", "apiKey"]
+          "requiredAny": [
+            "workflow",
+            "workflowPath"
+          ],
+          "required": [
+            "promptNodeId",
+            "apiKey"
+          ]
         },
         {
           "rootPath": "models.providers.comfy",
           "overlayPath": "music",
           "mode": {
             "path": "mode",
-            "allowed": ["cloud"]
+            "allowed": [
+              "cloud"
+            ]
           },
-          "requiredAny": ["workflow", "workflowPath"],
-          "required": ["promptNodeId", "apiKey"]
+          "requiredAny": [
+            "workflow",
+            "workflowPath"
+          ],
+          "required": [
+            "promptNodeId",
+            "apiKey"
+          ]
         }
       ]
     }
@@ -135,10 +214,17 @@
           "mode": {
             "path": "mode",
             "default": "local",
-            "allowed": ["local"]
+            "allowed": [
+              "local"
+            ]
           },
-          "requiredAny": ["workflow", "workflowPath"],
-          "required": ["promptNodeId"]
+          "requiredAny": [
+            "workflow",
+            "workflowPath"
+          ],
+          "required": [
+            "promptNodeId"
+          ]
         },
         {
           "rootPath": "models.providers.comfy",
@@ -146,30 +232,53 @@
           "mode": {
             "path": "mode",
             "default": "local",
-            "allowed": ["local"]
+            "allowed": [
+              "local"
+            ]
           },
-          "requiredAny": ["workflow", "workflowPath"],
-          "required": ["promptNodeId"]
+          "requiredAny": [
+            "workflow",
+            "workflowPath"
+          ],
+          "required": [
+            "promptNodeId"
+          ]
         },
         {
           "rootPath": "plugins.entries.comfy.config",
           "overlayPath": "video",
           "mode": {
             "path": "mode",
-            "allowed": ["cloud"]
+            "allowed": [
+              "cloud"
+            ]
           },
-          "requiredAny": ["workflow", "workflowPath"],
-          "required": ["promptNodeId", "apiKey"]
+          "requiredAny": [
+            "workflow",
+            "workflowPath"
+          ],
+          "required": [
+            "promptNodeId",
+            "apiKey"
+          ]
         },
         {
           "rootPath": "models.providers.comfy",
           "overlayPath": "video",
           "mode": {
             "path": "mode",
-            "allowed": ["cloud"]
+            "allowed": [
+              "cloud"
+            ]
           },
-          "requiredAny": ["workflow", "workflowPath"],
-          "required": ["promptNodeId", "apiKey"]
+          "requiredAny": [
+            "workflow",
+            "workflowPath"
+          ],
+          "required": [
+            "promptNodeId",
+            "apiKey"
+          ]
         }
       ]
     }
@@ -180,13 +289,19 @@
     "properties": {
       "mode": {
         "type": "string",
-        "enum": ["local", "cloud"]
+        "enum": [
+          "local",
+          "cloud"
+        ]
       },
       "baseUrl": {
         "type": "string"
       },
       "apiKey": {
-        "type": ["string", "object"]
+        "type": [
+          "string",
+          "object"
+        ]
       },
       "allowPrivateNetwork": {
         "type": "boolean"
@@ -224,43 +339,99 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "workflowPath": { "type": "string" },
-          "workflow": { "type": "object" },
-          "promptNodeId": { "type": "string" },
-          "promptInputName": { "type": "string" },
-          "inputImageNodeId": { "type": "string" },
-          "inputImageInputName": { "type": "string" },
-          "outputNodeId": { "type": "string" },
-          "pollIntervalMs": { "type": "integer", "minimum": 100 },
-          "timeoutMs": { "type": "integer", "minimum": 1000 }
+          "workflowPath": {
+            "type": "string"
+          },
+          "workflow": {
+            "type": "object"
+          },
+          "promptNodeId": {
+            "type": "string"
+          },
+          "promptInputName": {
+            "type": "string"
+          },
+          "inputImageNodeId": {
+            "type": "string"
+          },
+          "inputImageInputName": {
+            "type": "string"
+          },
+          "outputNodeId": {
+            "type": "string"
+          },
+          "pollIntervalMs": {
+            "type": "integer",
+            "minimum": 100
+          },
+          "timeoutMs": {
+            "type": "integer",
+            "minimum": 1000
+          }
         }
       },
       "video": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "workflowPath": { "type": "string" },
-          "workflow": { "type": "object" },
-          "promptNodeId": { "type": "string" },
-          "promptInputName": { "type": "string" },
-          "inputImageNodeId": { "type": "string" },
-          "inputImageInputName": { "type": "string" },
-          "outputNodeId": { "type": "string" },
-          "pollIntervalMs": { "type": "integer", "minimum": 100 },
-          "timeoutMs": { "type": "integer", "minimum": 1000 }
+          "workflowPath": {
+            "type": "string"
+          },
+          "workflow": {
+            "type": "object"
+          },
+          "promptNodeId": {
+            "type": "string"
+          },
+          "promptInputName": {
+            "type": "string"
+          },
+          "inputImageNodeId": {
+            "type": "string"
+          },
+          "inputImageInputName": {
+            "type": "string"
+          },
+          "outputNodeId": {
+            "type": "string"
+          },
+          "pollIntervalMs": {
+            "type": "integer",
+            "minimum": 100
+          },
+          "timeoutMs": {
+            "type": "integer",
+            "minimum": 1000
+          }
         }
       },
       "music": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "workflowPath": { "type": "string" },
-          "workflow": { "type": "object" },
-          "promptNodeId": { "type": "string" },
-          "promptInputName": { "type": "string" },
-          "outputNodeId": { "type": "string" },
-          "pollIntervalMs": { "type": "integer", "minimum": 100 },
-          "timeoutMs": { "type": "integer", "minimum": 1000 }
+          "workflowPath": {
+            "type": "string"
+          },
+          "workflow": {
+            "type": "object"
+          },
+          "promptNodeId": {
+            "type": "string"
+          },
+          "promptInputName": {
+            "type": "string"
+          },
+          "outputNodeId": {
+            "type": "string"
+          },
+          "pollIntervalMs": {
+            "type": "integer",
+            "minimum": 100
+          },
+          "timeoutMs": {
+            "type": "integer",
+            "minimum": 1000
+          }
         }
       }
     }

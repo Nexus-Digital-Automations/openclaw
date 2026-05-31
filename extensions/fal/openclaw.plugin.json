@@ -1,12 +1,23 @@
 {
   "id": "fal",
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "fal"
+    ]
+  },
   "activation": {
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["fal"],
+  "providers": [
+    "fal"
+  ],
   "providerAuthEnvVars": {
-    "fal": ["FAL_KEY", "FAL_API_KEY"]
+    "fal": [
+      "FAL_KEY",
+      "FAL_API_KEY"
+    ]
   },
   "providerAuthChoices": [
     {
@@ -17,7 +28,10 @@
       "groupId": "fal",
       "groupLabel": "fal",
       "groupHint": "Image, video, and music generation",
-      "onboardingScopes": ["image-generation", "music-generation"],
+      "onboardingScopes": [
+        "image-generation",
+        "music-generation"
+      ],
       "optionKey": "falApiKey",
       "cliFlag": "--fal-api-key",
       "cliOption": "--fal-api-key <key>",
@@ -25,9 +39,15 @@
     }
   ],
   "contracts": {
-    "imageGenerationProviders": ["fal"],
-    "musicGenerationProviders": ["fal"],
-    "videoGenerationProviders": ["fal"]
+    "imageGenerationProviders": [
+      "fal"
+    ],
+    "musicGenerationProviders": [
+      "fal"
+    ],
+    "videoGenerationProviders": [
+      "fal"
+    ]
   },
   "videoGenerationProviderMetadata": {
     "fal": {

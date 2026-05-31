@@ -1,5 +1,8 @@
 {
   "id": "diagnostics-otel",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": true
   },

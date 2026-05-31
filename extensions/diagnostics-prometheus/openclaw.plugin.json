@@ -1,5 +1,8 @@
 {
   "id": "diagnostics-prometheus",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": true
   },

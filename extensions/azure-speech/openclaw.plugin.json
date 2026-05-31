@@ -1,5 +1,8 @@
 {
   "id": "azure-speech",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": false
   },
@@ -23,7 +26,10 @@
     ]
   },
   "contracts": {
-    "speechProviders": ["azure-speech", "azure"]
+    "speechProviders": [
+      "azure-speech",
+      "azure"
+    ]
   },
   "configSchema": {
     "type": "object",

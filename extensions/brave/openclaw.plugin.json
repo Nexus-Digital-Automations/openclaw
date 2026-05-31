@@ -1,5 +1,8 @@
 {
   "id": "brave",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": false
   },

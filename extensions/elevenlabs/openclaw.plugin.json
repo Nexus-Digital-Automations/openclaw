@@ -1,20 +1,34 @@
 {
   "id": "elevenlabs",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": false
   },
   "enabledByDefault": true,
   "providerAuthEnvVars": {
-    "elevenlabs": ["ELEVENLABS_API_KEY", "XI_API_KEY"]
+    "elevenlabs": [
+      "ELEVENLABS_API_KEY",
+      "XI_API_KEY"
+    ]
   },
   "contracts": {
-    "speechProviders": ["elevenlabs"],
-    "mediaUnderstandingProviders": ["elevenlabs"],
-    "realtimeTranscriptionProviders": ["elevenlabs"]
+    "speechProviders": [
+      "elevenlabs"
+    ],
+    "mediaUnderstandingProviders": [
+      "elevenlabs"
+    ],
+    "realtimeTranscriptionProviders": [
+      "elevenlabs"
+    ]
   },
   "mediaUnderstandingProviderMetadata": {
     "elevenlabs": {
-      "capabilities": ["audio"],
+      "capabilities": [
+        "audio"
+      ],
       "defaultModels": {
         "audio": "scribe_v2"
       },

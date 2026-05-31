@@ -1,11 +1,21 @@
 {
   "id": "copilot-proxy",
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "copilot-proxy"
+    ]
+  },
   "activation": {
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["copilot-proxy"],
-  "autoEnableWhenConfiguredProviders": ["copilot-proxy"],
+  "providers": [
+    "copilot-proxy"
+  ],
+  "autoEnableWhenConfiguredProviders": [
+    "copilot-proxy"
+  ],
   "providerAuthChoices": [
     {
       "provider": "copilot-proxy",

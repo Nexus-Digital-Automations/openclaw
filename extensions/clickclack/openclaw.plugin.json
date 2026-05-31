@@ -1,11 +1,18 @@
 {
   "id": "clickclack",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": false
   },
-  "channels": ["clickclack"],
+  "channels": [
+    "clickclack"
+  ],
   "channelEnvVars": {
-    "clickclack": ["CLICKCLACK_BOT_TOKEN"]
+    "clickclack": [
+      "CLICKCLACK_BOT_TOKEN"
+    ]
   },
   "configSchema": {
     "type": "object",

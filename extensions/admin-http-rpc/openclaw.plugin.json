@@ -1,11 +1,18 @@
 {
   "id": "admin-http-rpc",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": false,
-    "onConfigPaths": ["plugins.entries.admin-http-rpc"]
+    "onConfigPaths": [
+      "plugins.entries.admin-http-rpc"
+    ]
   },
   "contracts": {
-    "gatewayMethodDispatch": ["authenticated-request"]
+    "gatewayMethodDispatch": [
+      "authenticated-request"
+    ]
   },
   "configSchema": {
     "type": "object",

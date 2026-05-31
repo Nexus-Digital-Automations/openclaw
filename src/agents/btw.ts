@@ -27,6 +27,7 @@ import { ensureOpenClawModelsJson } from "./models-config.js";
 import { listOpenAIAuthProfileProvidersForAgentRuntime } from "./openai-codex-routing.js";
 import { EmbeddedBlockChunker, type BlockReplyChunking } from "./pi-embedded-block-chunker.js";
 import { resolveModelWithRegistry } from "./pi-embedded-runner/model.js";
+import { getPriorRunCorrelationId } from "./pi-embedded-runner/run-state.js";
 import { getActiveEmbeddedRunSnapshot } from "./pi-embedded-runner/runs.js";
 import { streamWithPayloadPatch } from "./pi-embedded-runner/stream-payload-utils.js";
 import { discoverAuthStorage, discoverModels } from "./pi-model-discovery.js";
@@ -369,11 +370,17 @@ export async function runBtwSideQuestion(
     inFlightPrompt = activeRunSnapshot.inFlightPrompt;
   }
   if (messages.length === 0) {
+    // D.7a — when the prior turn touched untrusted content, route the
+    // transcript through the purifier before turning entries into next-turn
+    // prompt messages. Read the prior-turn correlationId recorded in D.6;
+    // undefined here causes the transcript reader to skip purification.
+    const priorCorrelationId = getPriorRunCorrelationId(sessionId);
     messages = await toSimpleContextMessages({
       messages: await readBtwTranscriptMessages({
         sessionFile,
         sessionId,
         snapshotLeafId: activeRunSnapshot?.transcriptLeafId,
+        ...(priorCorrelationId ? { priorCorrelationId } : {}),
       }),
       imageLimits,
     });

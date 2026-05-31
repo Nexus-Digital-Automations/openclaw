@@ -86,11 +86,21 @@ export async function rotateTranscriptAfterCompaction(params: {
   };
 }
 
+// D.3 part 3 — when callers carry a prior-turn correlationId + sessionId
+// they thread them through here so the post-parse entries route through
+// the purifier before the compaction successor reads them. Omitting both
+// preserves the existing behavior (read raw transcript, build successor).
 export async function rotateTranscriptFileAfterCompaction(params: {
   sessionFile: string;
   now?: () => Date;
+  priorCorrelationId?: string;
+  sessionId?: string;
 }): Promise<CompactionTranscriptRotation> {
-  const state = await readTranscriptFileState(params.sessionFile);
+  const purification =
+    params.priorCorrelationId !== undefined
+      ? { priorCorrelationId: params.priorCorrelationId, sessionId: params.sessionId ?? "" }
+      : undefined;
+  const state = await readTranscriptFileState(params.sessionFile, purification);
   return rotateTranscriptAfterCompaction({
     sessionManager: state,
     sessionFile: params.sessionFile,

@@ -29,6 +29,8 @@
 
 import { invokeInternalJudge, type JudgeResponse } from "../agents/internal-judge.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
+import { didCorrelationTouchExternalContent } from "../shared/process-external-content-bodies.js";
+import { wasCorrelationTainted } from "./context-taint-store.js";
 
 const log = createSubsystemLogger("context-purification");
 
@@ -96,10 +98,7 @@ export async function purifyTranscript(input: {
   if (typeof input.transcript !== "string" || input.transcript.length === 0) {
     return { purified: false, reason: "empty_transcript" };
   }
-  const judgeResponse = await invokeInternalJudge<
-    { transcript: string },
-    PurifierVerdictOutput
-  >({
+  const judgeResponse = await invokeInternalJudge<{ transcript: string }, PurifierVerdictOutput>({
     role: "context-purifier",
     systemPrompt: PURIFIER_SYSTEM_PROMPT,
     userPayload: { transcript: input.transcript },
@@ -108,6 +107,68 @@ export async function purifyTranscript(input: {
     modelHint: "fast",
   });
   return interpretJudgeResponse(judgeResponse, input);
+}
+
+export type PurifyParsedEntriesResult<TEntry> =
+  | { purified: false; entries: TEntry[]; reason: string }
+  | { purified: true; entries: TEntry[]; removedCount: number };
+
+/**
+ * D.2 — parse-post-hook wrapper. Decides whether the prior turn's
+ * correlation touched untrusted content (in-process flag OR disk taint
+ * store) and, if so, runs purifyTranscript over the concatenated entry
+ * content. When the gate fires AND the judge approves, each input entry
+ * is reissued with its content swapped for the matching sanitized line
+ * (1:1 by index — if the judge returns fewer lines than entries, the
+ * extras are dropped, which is the conservative outcome).
+ *
+ * When the gate doesn't fire OR the judge errors, entries are returned
+ * byte-identical. Disk transcript is never touched — this filters the
+ * in-memory next-turn prompt only.
+ *
+ * The selectors keep this generic across the three transcript-load
+ * consumers (btw, pi-embedded-runner, compaction); each consumer wires
+ * its own getContent + setContent against its parsed-entry shape.
+ *
+ * @stable
+ */
+export async function purifyParsedTranscriptEntries<TEntry>(input: {
+  entries: TEntry[];
+  priorCorrelationId: string;
+  getContent: (entry: TEntry) => string;
+  setContent: (entry: TEntry, content: string) => TEntry;
+  // Override the disk taint-store path. Production callers omit this and
+  // use the default `logs/context-taint.ndjson`; tests pass a temp path.
+  taintStorePath?: string;
+}): Promise<PurifyParsedEntriesResult<TEntry>> {
+  const diskTainted = await wasCorrelationTainted(
+    input.priorCorrelationId,
+    input.taintStorePath ? { storePath: input.taintStorePath } : undefined,
+  );
+  const touched = didCorrelationTouchExternalContent(input.priorCorrelationId) || diskTainted;
+  if (!shouldRunPurification(touched)) {
+    return { purified: false, entries: input.entries, reason: "clean_turn" };
+  }
+  if (input.entries.length === 0) {
+    return { purified: false, entries: input.entries, reason: "empty_entries" };
+  }
+  const transcript = input.entries.map((entry) => input.getContent(entry)).join("\n");
+  const verdict = await purifyTranscript({
+    transcript,
+    correlationId: input.priorCorrelationId,
+  });
+  if (!verdict.purified) {
+    return { purified: false, entries: input.entries, reason: verdict.reason };
+  }
+  const sanitizedEntries = input.entries.map((entry, index) => {
+    const sanitizedContent = verdict.sanitized[index] ?? "";
+    return input.setContent(entry, sanitizedContent);
+  });
+  return {
+    purified: true,
+    entries: sanitizedEntries,
+    removedCount: verdict.removedCount,
+  };
 }
 
 function interpretJudgeResponse(

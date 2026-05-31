@@ -1,7 +1,10 @@
 {
   "id": "thread-ownership",
   "capabilities": {
-    "hooks": []
+    "hooks": [
+      "message_received",
+      "message_sending"
+    ]
   },
   "activation": {
     "onStartup": true

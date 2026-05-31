@@ -1,7 +1,11 @@
 {
   "id": "memory-lancedb",
   "capabilities": {
-    "hooks": []
+    "hooks": [
+      "agent_end",
+      "before_prompt_build",
+      "session_end"
+    ]
   },
   "commandAliases": [
     {

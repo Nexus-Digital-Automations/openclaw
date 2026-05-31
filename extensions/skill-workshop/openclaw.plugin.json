@@ -1,7 +1,10 @@
 {
   "id": "skill-workshop",
   "capabilities": {
-    "hooks": []
+    "hooks": [
+      "agent_end",
+      "before_prompt_build"
+    ]
   },
   "activation": {
     "onStartup": true

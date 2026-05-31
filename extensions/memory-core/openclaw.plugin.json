@@ -1,7 +1,11 @@
 {
   "id": "memory-core",
   "capabilities": {
-    "hooks": []
+    "hooks": [
+      "before_agent_reply",
+      "gateway_start",
+      "gateway_stop"
+    ]
   },
   "activation": {
     "onStartup": false

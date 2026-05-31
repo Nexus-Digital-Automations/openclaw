@@ -1,7 +1,9 @@
 {
   "id": "diffs",
   "capabilities": {
-    "hooks": []
+    "hooks": [
+      "before_prompt_build"
+    ]
   },
   "activation": {
     "onStartup": true

@@ -1,11 +1,26 @@
 {
   "id": "matrix",
-  "commandAliases": [{ "name": "matrix" }],
+  "capabilities": {
+    "hooks": [
+      "subagent_delivery_target",
+      "subagent_ended",
+      "subagent_spawning"
+    ]
+  },
+  "commandAliases": [
+    {
+      "name": "matrix"
+    }
+  ],
   "activation": {
     "onStartup": false,
-    "onCommands": ["matrix"]
+    "onCommands": [
+      "matrix"
+    ]
   },
-  "channels": ["matrix"],
+  "channels": [
+    "matrix"
+  ],
   "channelEnvVars": {
     "matrix": [
       "MATRIX_HOMESERVER",

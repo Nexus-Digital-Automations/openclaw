@@ -4,10 +4,22 @@
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["anthropic-vertex"],
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "anthropic-vertex"
+    ]
+  },
+  "providers": [
+    "anthropic-vertex"
+  ],
   "providerCatalogEntry": "./provider-discovery.ts",
-  "syntheticAuthRefs": ["anthropic-vertex"],
-  "nonSecretAuthMarkers": ["gcp-vertex-credentials"],
+  "syntheticAuthRefs": [
+    "anthropic-vertex"
+  ],
+  "nonSecretAuthMarkers": [
+    "gcp-vertex-credentials"
+  ],
   "configSchema": {
     "type": "object",
     "additionalProperties": false,

@@ -4,11 +4,21 @@
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["cerebras"],
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "cerebras"
+    ]
+  },
+  "providers": [
+    "cerebras"
+  ],
   "providerEndpoints": [
     {
       "endpointClass": "cerebras-native",
-      "hosts": ["api.cerebras.ai"]
+      "hosts": [
+        "api.cerebras.ai"
+      ]
     }
   ],
   "providerRequest": {
@@ -27,7 +37,9 @@
           {
             "id": "zai-glm-4.7",
             "name": "Z.ai GLM 4.7",
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "reasoning": true,
             "contextWindow": 128000,
             "maxTokens": 8192,
@@ -41,7 +53,9 @@
           {
             "id": "gpt-oss-120b",
             "name": "GPT OSS 120B",
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "reasoning": true,
             "contextWindow": 128000,
             "maxTokens": 8192,
@@ -55,7 +69,9 @@
           {
             "id": "qwen-3-235b-a22b-instruct-2507",
             "name": "Qwen 3 235B Instruct",
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "contextWindow": 128000,
             "maxTokens": 8192,
             "cost": {
@@ -68,7 +84,9 @@
           {
             "id": "llama3.1-8b",
             "name": "Llama 3.1 8B",
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "contextWindow": 128000,
             "maxTokens": 8192,
             "cost": {
@@ -86,7 +104,9 @@
     }
   },
   "providerAuthEnvVars": {
-    "cerebras": ["CEREBRAS_API_KEY"]
+    "cerebras": [
+      "CEREBRAS_API_KEY"
+    ]
   },
   "providerAuthChoices": [
     {

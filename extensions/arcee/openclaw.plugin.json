@@ -4,9 +4,19 @@
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["arcee"],
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "arcee"
+    ]
+  },
+  "providers": [
+    "arcee"
+  ],
   "providerAuthEnvVars": {
-    "arcee": ["ARCEEAI_API_KEY"]
+    "arcee": [
+      "ARCEEAI_API_KEY"
+    ]
   },
   "providerAuthChoices": [
     {

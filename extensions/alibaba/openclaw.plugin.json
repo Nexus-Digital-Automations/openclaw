@@ -4,6 +4,10 @@
     "onStartup": false
   },
   "enabledByDefault": true,
+  "capabilities": {
+    "hooks": [],
+    "providers": ["alibaba"]
+  },
   "providerAuthEnvVars": {
     "alibaba": ["MODELSTUDIO_API_KEY", "DASHSCOPE_API_KEY", "QWEN_API_KEY"]
   },

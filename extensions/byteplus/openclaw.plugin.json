@@ -4,10 +4,22 @@
     "onStartup": false
   },
   "enabledByDefault": true,
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "byteplus",
+      "byteplus-plan"
+    ]
+  },
   "providerCatalogEntry": "./provider-discovery.ts",
-  "providers": ["byteplus", "byteplus-plan"],
+  "providers": [
+    "byteplus",
+    "byteplus-plan"
+  ],
   "providerAuthEnvVars": {
-    "byteplus": ["BYTEPLUS_API_KEY"]
+    "byteplus": [
+      "BYTEPLUS_API_KEY"
+    ]
   },
   "providerAuthAliases": {
     "byteplus-plan": "byteplus"
@@ -21,7 +33,10 @@
           {
             "id": "seed-1-8-251228",
             "name": "Seed 1.8",
-            "input": ["text", "image"],
+            "input": [
+              "text",
+              "image"
+            ],
             "contextWindow": 256000,
             "maxTokens": 4096,
             "cost": {
@@ -35,7 +50,10 @@
             "id": "kimi-k2-5-260127",
             "name": "Kimi K2.5",
             "reasoning": true,
-            "input": ["text", "image"],
+            "input": [
+              "text",
+              "image"
+            ],
             "contextWindow": 256000,
             "maxTokens": 32768,
             "cost": {
@@ -48,7 +66,10 @@
           {
             "id": "glm-4-7-251222",
             "name": "GLM 4.7",
-            "input": ["text", "image"],
+            "input": [
+              "text",
+              "image"
+            ],
             "contextWindow": 200000,
             "maxTokens": 4096,
             "cost": {
@@ -67,7 +88,9 @@
           {
             "id": "ark-code-latest",
             "name": "Ark Coding Plan",
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "contextWindow": 256000,
             "maxTokens": 4096,
             "cost": {
@@ -80,7 +103,9 @@
           {
             "id": "doubao-seed-code",
             "name": "Doubao Seed Code",
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "contextWindow": 256000,
             "maxTokens": 4096,
             "cost": {
@@ -93,7 +118,9 @@
           {
             "id": "glm-4.7",
             "name": "GLM 4.7 Coding",
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "contextWindow": 200000,
             "maxTokens": 4096,
             "cost": {
@@ -107,7 +134,9 @@
             "id": "kimi-k2-thinking",
             "name": "Kimi K2 Thinking",
             "reasoning": true,
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "contextWindow": 256000,
             "maxTokens": 32768,
             "cost": {
@@ -121,7 +150,9 @@
             "id": "kimi-k2.5",
             "name": "Kimi K2.5 Coding",
             "reasoning": true,
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "contextWindow": 256000,
             "maxTokens": 32768,
             "cost": {
@@ -155,7 +186,9 @@
     }
   ],
   "contracts": {
-    "videoGenerationProviders": ["byteplus"]
+    "videoGenerationProviders": [
+      "byteplus"
+    ]
   },
   "configSchema": {
     "type": "object",

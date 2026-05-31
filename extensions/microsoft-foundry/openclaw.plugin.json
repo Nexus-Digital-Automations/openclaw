@@ -1,12 +1,22 @@
 {
   "id": "microsoft-foundry",
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "microsoft-foundry"
+    ]
+  },
   "activation": {
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["microsoft-foundry"],
+  "providers": [
+    "microsoft-foundry"
+  ],
   "providerAuthEnvVars": {
-    "microsoft-foundry": ["AZURE_OPENAI_API_KEY"]
+    "microsoft-foundry": [
+      "AZURE_OPENAI_API_KEY"
+    ]
   },
   "providerAuthChoices": [
     {

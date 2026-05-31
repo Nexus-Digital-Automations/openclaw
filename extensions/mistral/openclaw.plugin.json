@@ -1,14 +1,24 @@
 {
   "id": "mistral",
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "mistral"
+    ]
+  },
   "activation": {
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["mistral"],
+  "providers": [
+    "mistral"
+  ],
   "providerEndpoints": [
     {
       "endpointClass": "mistral-public",
-      "hosts": ["api.mistral.ai"]
+      "hosts": [
+        "api.mistral.ai"
+      ]
     }
   ],
   "providerRequest": {
@@ -27,7 +37,9 @@
           {
             "id": "codestral-latest",
             "name": "Codestral (latest)",
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "contextWindow": 256000,
             "maxTokens": 4096,
             "cost": {
@@ -40,7 +52,9 @@
           {
             "id": "devstral-medium-latest",
             "name": "Devstral 2 (latest)",
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "contextWindow": 262144,
             "maxTokens": 32768,
             "cost": {
@@ -53,7 +67,9 @@
           {
             "id": "magistral-small",
             "name": "Magistral Small",
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "reasoning": true,
             "contextWindow": 128000,
             "maxTokens": 40000,
@@ -67,7 +83,10 @@
           {
             "id": "mistral-large-latest",
             "name": "Mistral Large (latest)",
-            "input": ["text", "image"],
+            "input": [
+              "text",
+              "image"
+            ],
             "contextWindow": 262144,
             "maxTokens": 16384,
             "cost": {
@@ -80,7 +99,10 @@
           {
             "id": "mistral-medium-2508",
             "name": "Mistral Medium 3.1",
-            "input": ["text", "image"],
+            "input": [
+              "text",
+              "image"
+            ],
             "contextWindow": 262144,
             "maxTokens": 8192,
             "cost": {
@@ -93,7 +115,10 @@
           {
             "id": "mistral-medium-3-5",
             "name": "Mistral Medium 3.5",
-            "input": ["text", "image"],
+            "input": [
+              "text",
+              "image"
+            ],
             "reasoning": true,
             "contextWindow": 262144,
             "maxTokens": 8192,
@@ -107,7 +132,10 @@
           {
             "id": "mistral-small-latest",
             "name": "Mistral Small (latest)",
-            "input": ["text", "image"],
+            "input": [
+              "text",
+              "image"
+            ],
             "reasoning": true,
             "contextWindow": 128000,
             "maxTokens": 16384,
@@ -121,7 +149,10 @@
           {
             "id": "pixtral-large-latest",
             "name": "Pixtral Large (latest)",
-            "input": ["text", "image"],
+            "input": [
+              "text",
+              "image"
+            ],
             "contextWindow": 128000,
             "maxTokens": 32768,
             "cost": {
@@ -139,7 +170,9 @@
     }
   },
   "providerAuthEnvVars": {
-    "mistral": ["MISTRAL_API_KEY"]
+    "mistral": [
+      "MISTRAL_API_KEY"
+    ]
   },
   "providerAuthChoices": [
     {
@@ -157,13 +190,21 @@
     }
   ],
   "contracts": {
-    "memoryEmbeddingProviders": ["mistral"],
-    "mediaUnderstandingProviders": ["mistral"],
-    "realtimeTranscriptionProviders": ["mistral"]
+    "memoryEmbeddingProviders": [
+      "mistral"
+    ],
+    "mediaUnderstandingProviders": [
+      "mistral"
+    ],
+    "realtimeTranscriptionProviders": [
+      "mistral"
+    ]
   },
   "mediaUnderstandingProviderMetadata": {
     "mistral": {
-      "capabilities": ["audio"],
+      "capabilities": [
+        "audio"
+      ],
       "defaultModels": {
         "audio": "voxtral-mini-latest"
       },

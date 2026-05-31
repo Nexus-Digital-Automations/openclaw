@@ -1,11 +1,18 @@
 {
   "id": "nostr",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": false
   },
-  "channels": ["nostr"],
+  "channels": [
+    "nostr"
+  ],
   "channelEnvVars": {
-    "nostr": ["NOSTR_PRIVATE_KEY"]
+    "nostr": [
+      "NOSTR_PRIVATE_KEY"
+    ]
   },
   "configSchema": {
     "type": "object",

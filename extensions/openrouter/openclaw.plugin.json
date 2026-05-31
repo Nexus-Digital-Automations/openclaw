@@ -1,10 +1,18 @@
 {
   "id": "openrouter",
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "openrouter"
+    ]
+  },
   "activation": {
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["openrouter"],
+  "providers": [
+    "openrouter"
+  ],
   "modelIdNormalization": {
     "providers": {
       "openrouter": {
@@ -25,7 +33,9 @@
   "providerEndpoints": [
     {
       "endpointClass": "openrouter",
-      "hostSuffixes": ["openrouter.ai"]
+      "hostSuffixes": [
+        "openrouter.ai"
+      ]
     }
   ],
   "providerRequest": {
@@ -36,7 +46,9 @@
     }
   },
   "providerAuthEnvVars": {
-    "openrouter": ["OPENROUTER_API_KEY"]
+    "openrouter": [
+      "OPENROUTER_API_KEY"
+    ]
   },
   "providerAuthChoices": [
     {
@@ -47,7 +59,10 @@
       "groupId": "openrouter",
       "groupLabel": "OpenRouter",
       "groupHint": "API key",
-      "onboardingScopes": ["text-inference", "music-generation"],
+      "onboardingScopes": [
+        "text-inference",
+        "music-generation"
+      ],
       "optionKey": "openrouterApiKey",
       "cliFlag": "--openrouter-api-key",
       "cliOption": "--openrouter-api-key <key>",
@@ -55,15 +70,28 @@
     }
   ],
   "contracts": {
-    "mediaUnderstandingProviders": ["openrouter"],
-    "imageGenerationProviders": ["openrouter"],
-    "musicGenerationProviders": ["openrouter"],
-    "videoGenerationProviders": ["openrouter"],
-    "speechProviders": ["openrouter"]
+    "mediaUnderstandingProviders": [
+      "openrouter"
+    ],
+    "imageGenerationProviders": [
+      "openrouter"
+    ],
+    "musicGenerationProviders": [
+      "openrouter"
+    ],
+    "videoGenerationProviders": [
+      "openrouter"
+    ],
+    "speechProviders": [
+      "openrouter"
+    ]
   },
   "mediaUnderstandingProviderMetadata": {
     "openrouter": {
-      "capabilities": ["image", "audio"],
+      "capabilities": [
+        "image",
+        "audio"
+      ],
       "defaultModels": {
         "image": "auto",
         "audio": "openai/whisper-large-v3-turbo"

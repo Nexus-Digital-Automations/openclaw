@@ -1,15 +1,26 @@
 {
   "id": "moonshot",
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "moonshot"
+    ]
+  },
   "activation": {
     "onStartup": false
   },
   "enabledByDefault": true,
   "providerCatalogEntry": "./provider-discovery.ts",
-  "providers": ["moonshot"],
+  "providers": [
+    "moonshot"
+  ],
   "providerEndpoints": [
     {
       "endpointClass": "moonshot-native",
-      "baseUrls": ["https://api.moonshot.ai/v1", "https://api.moonshot.cn/v1"]
+      "baseUrls": [
+        "https://api.moonshot.ai/v1",
+        "https://api.moonshot.cn/v1"
+      ]
     }
   ],
   "providerRequest": {
@@ -49,7 +60,10 @@
           {
             "id": "kimi-k2.6",
             "name": "Kimi K2.6",
-            "input": ["text", "image"],
+            "input": [
+              "text",
+              "image"
+            ],
             "contextWindow": 262144,
             "maxTokens": 262144,
             "cost": {
@@ -62,7 +76,10 @@
           {
             "id": "kimi-k2.5",
             "name": "Kimi K2.5",
-            "input": ["text", "image"],
+            "input": [
+              "text",
+              "image"
+            ],
             "contextWindow": 262144,
             "maxTokens": 262144,
             "cost": {
@@ -76,7 +93,9 @@
             "id": "kimi-k2-thinking",
             "name": "Kimi K2 Thinking",
             "reasoning": true,
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "contextWindow": 262144,
             "maxTokens": 262144,
             "cost": {
@@ -90,7 +109,9 @@
             "id": "kimi-k2-thinking-turbo",
             "name": "Kimi K2 Thinking Turbo",
             "reasoning": true,
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "contextWindow": 262144,
             "maxTokens": 262144,
             "cost": {
@@ -103,7 +124,9 @@
           {
             "id": "kimi-k2-turbo",
             "name": "Kimi K2 Turbo",
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "contextWindow": 256000,
             "maxTokens": 16384,
             "cost": {
@@ -121,7 +144,10 @@
     }
   },
   "providerAuthEnvVars": {
-    "moonshot": ["MOONSHOT_API_KEY", "KIMI_API_KEY"]
+    "moonshot": [
+      "MOONSHOT_API_KEY",
+      "KIMI_API_KEY"
+    ]
   },
   "providerAuthChoices": [
     {
@@ -167,12 +193,19 @@
     }
   },
   "contracts": {
-    "mediaUnderstandingProviders": ["moonshot"],
-    "webSearchProviders": ["kimi"]
+    "mediaUnderstandingProviders": [
+      "moonshot"
+    ],
+    "webSearchProviders": [
+      "kimi"
+    ]
   },
   "mediaUnderstandingProviderMetadata": {
     "moonshot": {
-      "capabilities": ["image", "video"],
+      "capabilities": [
+        "image",
+        "video"
+      ],
       "defaultModels": {
         "image": "kimi-k2.6",
         "video": "kimi-k2.6"
@@ -183,7 +216,9 @@
     }
   },
   "configContracts": {
-    "compatibilityRuntimePaths": ["tools.web.search.apiKey"]
+    "compatibilityRuntimePaths": [
+      "tools.web.search.apiKey"
+    ]
   },
   "configSchema": {
     "type": "object",
@@ -194,7 +229,10 @@
         "additionalProperties": false,
         "properties": {
           "apiKey": {
-            "type": ["string", "object"]
+            "type": [
+              "string",
+              "object"
+            ]
           },
           "baseUrl": {
             "type": "string"

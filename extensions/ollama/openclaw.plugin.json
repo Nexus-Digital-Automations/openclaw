@@ -1,10 +1,18 @@
 {
   "id": "ollama",
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "ollama"
+    ]
+  },
   "activation": {
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["ollama"],
+  "providers": [
+    "ollama"
+  ],
   "providerCatalogEntry": "./provider-discovery.ts",
   "providerRequest": {
     "providers": {
@@ -20,10 +28,16 @@
       }
     }
   },
-  "syntheticAuthRefs": ["ollama"],
-  "nonSecretAuthMarkers": ["ollama-local"],
+  "syntheticAuthRefs": [
+    "ollama"
+  ],
+  "nonSecretAuthMarkers": [
+    "ollama-local"
+  ],
   "providerAuthEnvVars": {
-    "ollama": ["OLLAMA_API_KEY"]
+    "ollama": [
+      "OLLAMA_API_KEY"
+    ]
   },
   "providerAuthChoices": [
     {
@@ -38,8 +52,12 @@
     }
   ],
   "contracts": {
-    "memoryEmbeddingProviders": ["ollama"],
-    "webSearchProviders": ["ollama"]
+    "memoryEmbeddingProviders": [
+      "ollama"
+    ],
+    "webSearchProviders": [
+      "ollama"
+    ]
   },
   "configSchema": {
     "type": "object",
@@ -49,7 +67,9 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "enabled": { "type": "boolean" }
+          "enabled": {
+            "type": "boolean"
+          }
         }
       }
     }

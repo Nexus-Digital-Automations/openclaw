@@ -1,11 +1,20 @@
 {
   "id": "msteams",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": false
   },
-  "channels": ["msteams"],
+  "channels": [
+    "msteams"
+  ],
   "channelEnvVars": {
-    "msteams": ["MSTEAMS_APP_ID", "MSTEAMS_APP_PASSWORD", "MSTEAMS_TENANT_ID"]
+    "msteams": [
+      "MSTEAMS_APP_ID",
+      "MSTEAMS_APP_PASSWORD",
+      "MSTEAMS_TENANT_ID"
+    ]
   },
   "configSchema": {
     "type": "object",

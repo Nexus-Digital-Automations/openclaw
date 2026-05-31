@@ -1,11 +1,16 @@
 {
   "id": "microsoft",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": false
   },
   "enabledByDefault": true,
   "contracts": {
-    "speechProviders": ["microsoft"]
+    "speechProviders": [
+      "microsoft"
+    ]
   },
   "configSchema": {
     "type": "object",

@@ -1,10 +1,17 @@
 {
   "id": "tlon",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": false
   },
-  "channels": ["tlon"],
-  "skills": ["node_modules/@tloncorp/tlon-skill"],
+  "channels": [
+    "tlon"
+  ],
+  "skills": [
+    "node_modules/@tloncorp/tlon-skill"
+  ],
   "configSchema": {
     "type": "object",
     "additionalProperties": false,

@@ -1,10 +1,18 @@
 {
   "id": "vercel-ai-gateway",
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "vercel-ai-gateway"
+    ]
+  },
   "activation": {
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["vercel-ai-gateway"],
+  "providers": [
+    "vercel-ai-gateway"
+  ],
   "modelIdNormalization": {
     "providers": {
       "vercel-ai-gateway": {
@@ -34,7 +42,9 @@
     }
   },
   "providerAuthEnvVars": {
-    "vercel-ai-gateway": ["AI_GATEWAY_API_KEY"]
+    "vercel-ai-gateway": [
+      "AI_GATEWAY_API_KEY"
+    ]
   },
   "providerAuthChoices": [
     {

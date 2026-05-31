@@ -1,11 +1,17 @@
 {
   "id": "tts-local-cli",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": false
   },
   "enabledByDefault": true,
   "contracts": {
-    "speechProviders": ["tts-local-cli", "cli"]
+    "speechProviders": [
+      "tts-local-cli",
+      "cli"
+    ]
   },
   "configSchema": {
     "type": "object",

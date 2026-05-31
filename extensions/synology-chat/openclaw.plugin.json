@@ -1,9 +1,14 @@
 {
   "id": "synology-chat",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": false
   },
-  "channels": ["synology-chat"],
+  "channels": [
+    "synology-chat"
+  ],
   "channelEnvVars": {
     "synology-chat": [
       "SYNOLOGY_CHAT_TOKEN",

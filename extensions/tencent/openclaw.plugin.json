@@ -1,11 +1,19 @@
 {
   "id": "tencent",
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "tencent-tokenhub"
+    ]
+  },
   "activation": {
     "onStartup": false
   },
   "enabledByDefault": true,
   "providerCatalogEntry": "./provider-discovery.ts",
-  "providers": ["tencent-tokenhub"],
+  "providers": [
+    "tencent-tokenhub"
+  ],
   "modelCatalog": {
     "providers": {
       "tencent-tokenhub": {
@@ -16,7 +24,9 @@
             "id": "hy3-preview",
             "name": "Hy3 preview (TokenHub)",
             "reasoning": true,
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "contextWindow": 256000,
             "maxTokens": 64000,
             "cost": {
@@ -30,21 +40,29 @@
                   "output": 0.587,
                   "cacheRead": 0.059,
                   "cacheWrite": 0,
-                  "range": [0, 16000]
+                  "range": [
+                    0,
+                    16000
+                  ]
                 },
                 {
                   "input": 0.235,
                   "output": 0.939,
                   "cacheRead": 0.088,
                   "cacheWrite": 0,
-                  "range": [16000, 32000]
+                  "range": [
+                    16000,
+                    32000
+                  ]
                 },
                 {
                   "input": 0.293,
                   "output": 1.173,
                   "cacheRead": 0.117,
                   "cacheWrite": 0,
-                  "range": [32000]
+                  "range": [
+                    32000
+                  ]
                 }
               ]
             },
@@ -61,7 +79,9 @@
     }
   },
   "providerAuthEnvVars": {
-    "tencent-tokenhub": ["TOKENHUB_API_KEY"]
+    "tencent-tokenhub": [
+      "TOKENHUB_API_KEY"
+    ]
   },
   "providerAuthChoices": [
     {

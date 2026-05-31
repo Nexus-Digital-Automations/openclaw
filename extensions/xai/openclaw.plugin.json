@@ -1,10 +1,18 @@
 {
   "id": "xai",
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "xai"
+    ]
+  },
   "activation": {
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["xai"],
+  "providers": [
+    "xai"
+  ],
   "providerCatalogEntry": "./provider-discovery.ts",
   "modelIdNormalization": {
     "providers": {
@@ -21,7 +29,9 @@
   "providerEndpoints": [
     {
       "endpointClass": "xai-native",
-      "hosts": ["api.x.ai"]
+      "hosts": [
+        "api.x.ai"
+      ]
     }
   ],
   "providerRequest": {
@@ -31,9 +41,13 @@
       }
     }
   },
-  "syntheticAuthRefs": ["xai"],
+  "syntheticAuthRefs": [
+    "xai"
+  ],
   "providerAuthEnvVars": {
-    "xai": ["XAI_API_KEY"]
+    "xai": [
+      "XAI_API_KEY"
+    ]
   },
   "providerAuthChoices": [
     {
@@ -137,17 +151,34 @@
     }
   },
   "contracts": {
-    "webSearchProviders": ["grok"],
-    "videoGenerationProviders": ["xai"],
-    "mediaUnderstandingProviders": ["xai"],
-    "speechProviders": ["xai"],
-    "realtimeTranscriptionProviders": ["xai"],
-    "imageGenerationProviders": ["xai"],
-    "tools": ["code_execution", "x_search"]
+    "webSearchProviders": [
+      "grok"
+    ],
+    "videoGenerationProviders": [
+      "xai"
+    ],
+    "mediaUnderstandingProviders": [
+      "xai"
+    ],
+    "speechProviders": [
+      "xai"
+    ],
+    "realtimeTranscriptionProviders": [
+      "xai"
+    ],
+    "imageGenerationProviders": [
+      "xai"
+    ],
+    "tools": [
+      "code_execution",
+      "x_search"
+    ]
   },
   "mediaUnderstandingProviderMetadata": {
     "xai": {
-      "capabilities": ["audio"],
+      "capabilities": [
+        "audio"
+      ],
       "defaultModels": {
         "audio": "grok-stt"
       },
@@ -167,11 +198,15 @@
         {
           "rootPath": "plugins.entries.xai.config",
           "overlayPath": "webSearch",
-          "required": ["apiKey"]
+          "required": [
+            "apiKey"
+          ]
         },
         {
           "rootPath": "tools.web.search.grok",
-          "required": ["apiKey"]
+          "required": [
+            "apiKey"
+          ]
         }
       ]
     },
@@ -185,17 +220,23 @@
         {
           "rootPath": "plugins.entries.xai.config",
           "overlayPath": "webSearch",
-          "required": ["apiKey"]
+          "required": [
+            "apiKey"
+          ]
         },
         {
           "rootPath": "tools.web.search.grok",
-          "required": ["apiKey"]
+          "required": [
+            "apiKey"
+          ]
         }
       ]
     }
   },
   "configContracts": {
-    "compatibilityRuntimePaths": ["tools.web.search.apiKey"]
+    "compatibilityRuntimePaths": [
+      "tools.web.search.apiKey"
+    ]
   },
   "configSchema": {
     "type": "object",
@@ -206,7 +247,10 @@
         "additionalProperties": false,
         "properties": {
           "apiKey": {
-            "type": ["string", "object"]
+            "type": [
+              "string",
+              "object"
+            ]
           },
           "model": {
             "type": "string"

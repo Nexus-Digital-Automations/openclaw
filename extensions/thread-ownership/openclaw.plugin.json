@@ -1,5 +1,8 @@
 {
   "id": "thread-ownership",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": true
   },
@@ -14,7 +17,9 @@
       },
       "abTestChannels": {
         "type": "array",
-        "items": { "type": "string" }
+        "items": {
+          "type": "string"
+        }
       }
     }
   },

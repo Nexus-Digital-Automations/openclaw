@@ -1,14 +1,24 @@
 {
   "id": "zalouser",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": false
   },
-  "channels": ["zalouser"],
+  "channels": [
+    "zalouser"
+  ],
   "contracts": {
-    "tools": ["zalouser"]
+    "tools": [
+      "zalouser"
+    ]
   },
   "channelEnvVars": {
-    "zalouser": ["ZALOUSER_PROFILE", "ZCA_PROFILE"]
+    "zalouser": [
+      "ZALOUSER_PROFILE",
+      "ZCA_PROFILE"
+    ]
   },
   "configSchema": {
     "type": "object",

@@ -1,11 +1,19 @@
 {
   "id": "zalo",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": false
   },
-  "channels": ["zalo"],
+  "channels": [
+    "zalo"
+  ],
   "channelEnvVars": {
-    "zalo": ["ZALO_BOT_TOKEN", "ZALO_WEBHOOK_SECRET"]
+    "zalo": [
+      "ZALO_BOT_TOKEN",
+      "ZALO_WEBHOOK_SECRET"
+    ]
   },
   "configSchema": {
     "type": "object",

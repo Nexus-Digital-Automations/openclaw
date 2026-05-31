@@ -183,6 +183,52 @@ export function normalizeCapabilitiesManifest(raw: unknown): PluginCapabilities 
   return out;
 }
 
+// C.2 — runtime accessor. Populated by the install-signing gate after the
+// signed manifest's capabilities block parses cleanly; consulted by the
+// hook-runtime warn-mode gate (C.3) and downstream HTTP/FS guards (E
+// workstream) to bound plugin behavior to its declared surface.
+const pluginCapabilitiesById = new Map<string, PluginCapabilities>();
+
+/**
+ * Cache a plugin's declared capability surface keyed by id. Called once
+ * per plugin install / load by the install-signing gate; subsequent
+ * runtime calls read via `getPluginCapabilities`. Idempotent — re-calls
+ * with the same id overwrite (matches plugin upgrade behavior).
+ *
+ * @stable
+ */
+export function setPluginCapabilities(pluginId: string, capabilities: PluginCapabilities): void {
+  if (typeof pluginId !== "string" || pluginId.length === 0) {
+    return;
+  }
+  pluginCapabilitiesById.set(pluginId, capabilities);
+}
+
+/**
+ * Look up a plugin's declared capability surface by id. Returns
+ * `undefined` when the plugin has never declared a capability manifest —
+ * the runtime gate then falls back to whatever its "no declared surface"
+ * policy is (warn-mode logs + counts; strict-mode refuses).
+ *
+ * @stable
+ */
+export function getPluginCapabilities(pluginId: string): PluginCapabilities | undefined {
+  if (typeof pluginId !== "string" || pluginId.length === 0) {
+    return undefined;
+  }
+  return pluginCapabilitiesById.get(pluginId);
+}
+
+/**
+ * Test-only: wipe the per-process capability cache between tests so a
+ * registration in one test cannot leak into the next.
+ *
+ * @internal
+ */
+export function clearPluginCapabilitiesForTests(): void {
+  pluginCapabilitiesById.clear();
+}
+
 const HOOK_NAMES: ReadonlySet<PluginHookName> = new Set([
   "before_prompt_build",
   "before_tool_call",

@@ -1658,6 +1658,12 @@ async function installPluginFromPackageDir(
         logger.warn?.(`plugin install refused: ${signingResult.code} ${signingResult.reason}`);
         return { ok: false, error: signingResult.reason, code: signingResult.code };
       }
+    } else if (signingResult.capabilities) {
+      // C.2 — publish the verified capability surface to the runtime cache
+      // so the warn-mode hook gate (C.3) and downstream HTTP/FS guards (E)
+      // can read it via getPluginCapabilities(pluginId).
+      const { setPluginCapabilities } = await import("./capabilities.js");
+      setPluginCapabilities(plugin.pluginId, signingResult.capabilities);
     }
   }
 

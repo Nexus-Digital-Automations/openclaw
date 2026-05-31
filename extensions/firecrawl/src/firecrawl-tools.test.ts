@@ -211,7 +211,7 @@ describe("firecrawl tools", () => {
         },
         async () => "ok",
       ),
-    ).rejects.toThrow(/<<<EXTERNAL_UNTRUSTED_CONTENT id="[a-f0-9]{16}">>>/);
+    ).rejects.toThrow(/<<<EXTERNAL_UNTRUSTED_CONTENT id="[a-f0-9]{16}" source="web_fetch">>>/);
   });
 
   it("normalizes Firecrawl authorization headers before requests", async () => {

@@ -13,6 +13,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { appendRegularFile } from "../../infra/fs-safe.js";
 import { privateFileStore } from "../../infra/private-file-store.js";
+import { maybePurifySessionEntries } from "../../security/maybe-purify-session-entries.js";
 
 type BranchSummaryEntry = Extract<SessionEntry, { type: "branch_summary" }>;
 type CompactionEntry = Extract<SessionEntry, { type: "compaction" }>;
@@ -663,7 +664,16 @@ export class TranscriptFileState {
   }
 }
 
-export async function readTranscriptFileState(sessionFile: string): Promise<TranscriptFileState> {
+// D.3 part 2 — `purification` lets callers route post-parse entries through
+// the taint-store-gated purifier before they reach the in-memory transcript
+// state. The disk file is not touched: only the in-memory `entries` array
+// is rewritten. Omit `purification` (or `priorCorrelationId`) to skip the
+// gate entirely — the existing pre-D.3 behavior for callers that have no
+// prior-turn correlation context.
+export async function readTranscriptFileState(
+  sessionFile: string,
+  purification?: { priorCorrelationId?: string; sessionId?: string },
+): Promise<TranscriptFileState> {
   const raw = await fs.readFile(sessionFile, "utf-8");
   const fileEntries = (parseSessionEntries(raw) as unknown[]).map(fileEntryOrMigrationSlot);
   const headerBeforeMigration =
@@ -673,7 +683,12 @@ export async function readTranscriptFileState(sessionFile: string): Promise<Tran
   migrateSessionEntries(fileEntries);
   const header =
     fileEntries.find((entry): entry is SessionHeader => entry.type === "session") ?? null;
-  const entries = readableSessionEntries(fileEntries);
+  const rawEntries = readableSessionEntries(fileEntries);
+  const entries = await maybePurifySessionEntries(
+    rawEntries,
+    purification?.priorCorrelationId,
+    purification?.sessionId ?? "",
+  );
   return new TranscriptFileState({ header, entries, migrated });
 }
 

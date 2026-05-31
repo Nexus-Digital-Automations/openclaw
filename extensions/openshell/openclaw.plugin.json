@@ -1,5 +1,8 @@
 {
   "id": "openshell",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": true
   },
@@ -11,7 +14,10 @@
     "properties": {
       "mode": {
         "type": "string",
-        "enum": ["mirror", "remote"]
+        "enum": [
+          "mirror",
+          "remote"
+        ]
       },
       "command": {
         "type": "string",

@@ -1,11 +1,17 @@
 {
   "id": "runway",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": false
   },
   "enabledByDefault": true,
   "providerAuthEnvVars": {
-    "runway": ["RUNWAYML_API_SECRET", "RUNWAY_API_KEY"]
+    "runway": [
+      "RUNWAYML_API_SECRET",
+      "RUNWAY_API_KEY"
+    ]
   },
   "providerAuthChoices": [
     {
@@ -16,7 +22,9 @@
       "groupId": "runway",
       "groupLabel": "Runway",
       "groupHint": "API key",
-      "onboardingScopes": ["image-generation"],
+      "onboardingScopes": [
+        "image-generation"
+      ],
       "optionKey": "runwayApiKey",
       "cliFlag": "--runway-api-key",
       "cliOption": "--runway-api-key <key>",
@@ -24,7 +32,9 @@
     }
   ],
   "contracts": {
-    "videoGenerationProviders": ["runway"]
+    "videoGenerationProviders": [
+      "runway"
+    ]
   },
   "configSchema": {
     "type": "object",

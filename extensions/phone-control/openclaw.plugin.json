@@ -1,5 +1,8 @@
 {
   "id": "phone-control",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": true
   },

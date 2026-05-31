@@ -1,12 +1,17 @@
 {
   "id": "skill-workshop",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": true
   },
   "name": "Skill Workshop",
   "description": "Captures repeatable workflows as workspace skills, with pending review, safe writes, and skill prompt refresh.",
   "contracts": {
-    "tools": ["skill_workshop"]
+    "tools": [
+      "skill_workshop"
+    ]
   },
   "uiHints": {
     "autoCapture": {
@@ -40,12 +45,20 @@
       },
       "approvalPolicy": {
         "type": "string",
-        "enum": ["pending", "auto"],
+        "enum": [
+          "pending",
+          "auto"
+        ],
         "default": "pending"
       },
       "reviewMode": {
         "type": "string",
-        "enum": ["off", "heuristic", "llm", "hybrid"],
+        "enum": [
+          "off",
+          "heuristic",
+          "llm",
+          "hybrid"
+        ],
         "default": "hybrid"
       },
       "reviewInterval": {

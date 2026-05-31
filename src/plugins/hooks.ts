@@ -273,8 +273,12 @@ const DECLARED_HOOK_NAMES = new Set<string>([
 // flip warn → throw once the count steadies near zero post-C.4.
 const capabilityViolationCounters = new Map<string, number>();
 
-function recordCapabilityViolation(pluginId: string, hookName: string): void {
-  const key = `${pluginId}::${hookName}`;
+// C.3 part 2 — seam label so the warn-telemetry can answer "which dispatch
+// path observed this violation" once more dispatch surfaces opt in. Today
+// only runVoidHook calls the gate; the label still serves audit consumers
+// who want to slice violations by seam without parsing call stacks.
+function recordCapabilityViolation(pluginId: string, hookName: string, seam: string): void {
+  const key = `${pluginId}::${hookName}::${seam}`;
   capabilityViolationCounters.set(key, (capabilityViolationCounters.get(key) ?? 0) + 1);
 }
 
@@ -291,6 +295,7 @@ function passesCapabilityGateOrWarn(
   pluginId: string,
   hookName: string,
   logger: { warn?: (message: string) => void } | undefined,
+  options?: { seam?: string },
 ): boolean {
   if (!DECLARED_HOOK_NAMES.has(hookName)) {
     return true;
@@ -303,12 +308,14 @@ function passesCapabilityGateOrWarn(
   if (verdict.ok) {
     return true;
   }
-  recordCapabilityViolation(pluginId, hookName);
+  const seam = options?.seam ?? "runVoidHook";
+  recordCapabilityViolation(pluginId, hookName, seam);
   logger?.warn?.(
     JSON.stringify({
       event: "plugin.capability.violation_observed",
       pluginId,
       hookName,
+      seam,
       reason: verdict.reason,
       declared: capabilities.hooks ?? [],
     }),
@@ -644,7 +651,7 @@ export function createHookRunner(
     logger?.debug?.(`[hooks] running ${hookName} (${hooks.length} handlers)`);
 
     const promises = hooks.map(async (hook) => {
-      if (!passesCapabilityGateOrWarn(hook.pluginId, hookName, logger)) {
+      if (!passesCapabilityGateOrWarn(hook.pluginId, hookName, logger, { seam: "runVoidHook" })) {
         return;
       }
       try {

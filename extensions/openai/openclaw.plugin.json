@@ -4,6 +4,10 @@
     "onStartup": false
   },
   "enabledByDefault": true,
+  "capabilities": {
+    "hooks": [],
+    "providers": ["openai", "openai-codex"]
+  },
   "providers": ["openai", "openai-codex"],
   "modelSupport": {
     "modelPrefixes": ["gpt-", "o1", "o3", "o4"]

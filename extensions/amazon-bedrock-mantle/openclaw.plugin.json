@@ -4,6 +4,10 @@
     "onStartup": false
   },
   "enabledByDefault": true,
+  "capabilities": {
+    "hooks": [],
+    "providers": ["amazon-bedrock-mantle"]
+  },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,

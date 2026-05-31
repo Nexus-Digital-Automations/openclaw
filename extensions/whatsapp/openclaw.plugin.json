@@ -1,9 +1,14 @@
 {
   "id": "whatsapp",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": false
   },
-  "channels": ["whatsapp"],
+  "channels": [
+    "whatsapp"
+  ],
   "configSchema": {
     "type": "object",
     "additionalProperties": false,

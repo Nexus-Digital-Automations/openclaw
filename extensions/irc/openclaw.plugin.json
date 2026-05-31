@@ -1,9 +1,14 @@
 {
   "id": "irc",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": false
   },
-  "channels": ["irc"],
+  "channels": [
+    "irc"
+  ],
   "channelEnvVars": {
     "irc": [
       "IRC_HOST",

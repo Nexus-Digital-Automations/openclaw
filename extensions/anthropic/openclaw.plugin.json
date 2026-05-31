@@ -1,10 +1,18 @@
 {
   "id": "anthropic",
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "anthropic"
+    ]
+  },
   "activation": {
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["anthropic"],
+  "providers": [
+    "anthropic"
+  ],
   "providerCatalogEntry": "./provider-discovery.ts",
   "modelCatalog": {
     "providers": {
@@ -14,21 +22,30 @@
             "id": "claude-opus-4-7",
             "name": "Claude Opus 4.7 (Claude CLI)",
             "reasoning": true,
-            "input": ["text", "image"],
+            "input": [
+              "text",
+              "image"
+            ],
             "contextWindow": 200000
           },
           {
             "id": "claude-sonnet-4-6",
             "name": "Claude Sonnet 4.6 (Claude CLI)",
             "reasoning": true,
-            "input": ["text", "image"],
+            "input": [
+              "text",
+              "image"
+            ],
             "contextWindow": 200000
           },
           {
             "id": "claude-opus-4-6",
             "name": "Claude Opus 4.6 (Claude CLI)",
             "reasoning": true,
-            "input": ["text", "image"],
+            "input": [
+              "text",
+              "image"
+            ],
             "contextWindow": 200000
           }
         ]
@@ -39,7 +56,9 @@
     }
   },
   "modelSupport": {
-    "modelPrefixes": ["claude-"]
+    "modelPrefixes": [
+      "claude-"
+    ]
   },
   "modelIdNormalization": {
     "providers": {
@@ -55,7 +74,9 @@
     "providers": {
       "anthropic": {
         "openRouter": {
-          "modelIdTransforms": ["version-dots"]
+          "modelIdTransforms": [
+            "version-dots"
+          ]
         }
       }
     }
@@ -63,7 +84,9 @@
   "providerEndpoints": [
     {
       "endpointClass": "anthropic-public",
-      "hosts": ["api.anthropic.com"]
+      "hosts": [
+        "api.anthropic.com"
+      ]
     }
   ],
   "providerRequest": {
@@ -73,17 +96,26 @@
       }
     }
   },
-  "cliBackends": ["claude-cli"],
-  "syntheticAuthRefs": ["claude-cli"],
+  "cliBackends": [
+    "claude-cli"
+  ],
+  "syntheticAuthRefs": [
+    "claude-cli"
+  ],
   "providerAuthEnvVars": {
-    "anthropic": ["ANTHROPIC_OAUTH_TOKEN", "ANTHROPIC_API_KEY"]
+    "anthropic": [
+      "ANTHROPIC_OAUTH_TOKEN",
+      "ANTHROPIC_API_KEY"
+    ]
   },
   "providerAuthChoices": [
     {
       "provider": "anthropic",
       "method": "cli",
       "choiceId": "anthropic-cli",
-      "deprecatedChoiceIds": ["claude-cli"],
+      "deprecatedChoiceIds": [
+        "claude-cli"
+      ],
       "choiceLabel": "Anthropic Claude CLI",
       "choiceHint": "Reuse a local Claude CLI login on this host",
       "assistantPriority": -20,
@@ -120,18 +152,24 @@
     }
   ],
   "contracts": {
-    "mediaUnderstandingProviders": ["anthropic"]
+    "mediaUnderstandingProviders": [
+      "anthropic"
+    ]
   },
   "mediaUnderstandingProviderMetadata": {
     "anthropic": {
-      "capabilities": ["image"],
+      "capabilities": [
+        "image"
+      ],
       "defaultModels": {
         "image": "claude-opus-4-7"
       },
       "autoPriority": {
         "image": 20
       },
-      "nativeDocumentInputs": ["pdf"]
+      "nativeDocumentInputs": [
+        "pdf"
+      ]
     }
   },
   "configSchema": {

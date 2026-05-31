@@ -1,10 +1,15 @@
 {
   "id": "firecrawl",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": false
   },
   "providerAuthEnvVars": {
-    "firecrawl": ["FIRECRAWL_API_KEY"]
+    "firecrawl": [
+      "FIRECRAWL_API_KEY"
+    ]
   },
   "uiHints": {
     "webSearch.apiKey": {
@@ -29,12 +34,21 @@
     }
   },
   "contracts": {
-    "webFetchProviders": ["firecrawl"],
-    "webSearchProviders": ["firecrawl"],
-    "tools": ["firecrawl_search", "firecrawl_scrape"]
+    "webFetchProviders": [
+      "firecrawl"
+    ],
+    "webSearchProviders": [
+      "firecrawl"
+    ],
+    "tools": [
+      "firecrawl_search",
+      "firecrawl_scrape"
+    ]
   },
   "configContracts": {
-    "compatibilityRuntimePaths": ["tools.web.search.apiKey"]
+    "compatibilityRuntimePaths": [
+      "tools.web.search.apiKey"
+    ]
   },
   "configSchema": {
     "type": "object",
@@ -45,7 +59,10 @@
         "additionalProperties": false,
         "properties": {
           "apiKey": {
-            "type": ["string", "object"]
+            "type": [
+              "string",
+              "object"
+            ]
           },
           "baseUrl": {
             "type": "string"
@@ -57,7 +74,10 @@
         "additionalProperties": false,
         "properties": {
           "apiKey": {
-            "type": ["string", "object"]
+            "type": [
+              "string",
+              "object"
+            ]
           },
           "baseUrl": {
             "type": "string"

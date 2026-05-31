@@ -256,7 +256,11 @@ export function clearPluginCapabilitiesForTests(): void {
   pluginCapabilitiesById.clear();
 }
 
-const HOOK_NAMES: ReadonlySet<PluginHookName> = new Set([
+// C.3 — single source of truth for the declarable hook surface. Exported
+// so the runtime gate in hooks.ts uses the same set as manifest validation;
+// drift would let a hook declarable in the manifest escape the gate (or
+// vice versa). Keep this set + the PluginHookName type literally aligned.
+export const DECLARED_PLUGIN_HOOK_NAMES: ReadonlySet<PluginHookName> = new Set([
   "before_prompt_build",
   "before_tool_call",
   "message_sending",
@@ -289,7 +293,7 @@ const FS_SCOPES: ReadonlySet<PluginFsScope> = new Set([
 ]);
 
 function isPluginHookName(value: string): value is PluginHookName {
-  return HOOK_NAMES.has(value as PluginHookName);
+  return DECLARED_PLUGIN_HOOK_NAMES.has(value as PluginHookName);
 }
 
 function isPluginFsScope(value: string): value is PluginFsScope {

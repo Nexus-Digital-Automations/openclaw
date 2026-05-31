@@ -10,6 +10,7 @@ import { formatErrorMessage } from "../infra/errors.js";
 import { concatOptionalTextSegments } from "../shared/text/join-segments.js";
 import {
   checkHookCapability,
+  DECLARED_PLUGIN_HOOK_NAMES,
   getPluginCapabilities,
   type PluginHookName as DeclaredPluginHookName,
 } from "./capabilities.js";
@@ -253,39 +254,15 @@ export type PluginTargetedInboundClaimOutcome =
       error: string;
     };
 
-// C.3 — declared-surface hook names. Subset of hook-types.ts:68
-// PluginHookName that capability manifests can name (= capabilities.ts:22
-// PluginHookName). Hooks outside this set never go through the capability
-// gate by design: sync-write integration hooks (tool_result_persist,
-// before_message_write), gateway lifecycle hooks (gateway_start/stop,
-// deactivate), pure instrumentation (heartbeat_prompt_contribution), and
-// claim-style hooks dispatched through runClaimingHook (the gate is wired
-// only at runVoidHook today). Keep in lockstep with capabilities.ts
-// PluginHookName + HOOK_NAMES; the test "DECLARED_HOOK_NAMES matches
-// capabilities.ts PluginHookName" catches drift.
-const DECLARED_HOOK_NAMES = new Set<string>([
-  "before_prompt_build",
-  "before_tool_call",
-  "message_sending",
-  "post_tool_result",
-  "post_message_send",
-  "session_start",
-  "session_end",
-  "before_compaction",
-  "after_compaction",
-  "before_reset",
-  "message_received",
-  "message_sent",
-  "after_tool_call",
-  "agent_end",
-  "llm_input",
-  "llm_output",
-  "model_call_started",
-  "model_call_ended",
-  "subagent_spawned",
-  "subagent_ended",
-  "cron_changed",
-]);
+// C.3 — declared-surface hook names. Re-export of capabilities.ts'
+// DECLARED_PLUGIN_HOOK_NAMES so the runtime gate and manifest validation
+// share one source of truth. Hooks outside this set never go through
+// the capability gate by design: sync-write integration hooks
+// (tool_result_persist, before_message_write), gateway lifecycle hooks
+// (gateway_start/stop, deactivate), pure instrumentation
+// (heartbeat_prompt_contribution), and claim-style hooks dispatched
+// through runClaimingHook (the gate is wired only at runVoidHook today).
+const DECLARED_HOOK_NAMES: ReadonlySet<string> = DECLARED_PLUGIN_HOOK_NAMES;
 
 // Per-process counter for the warn-mode telemetry. Operators reading the
 // JSON log can sum these to size the manifest-backfill workload, or
@@ -340,6 +317,18 @@ function passesCapabilityGateOrWarn(
     }),
   );
   return true;
+}
+
+// Test-only: drive the gate directly. Production code paths invoke the
+// gate via runVoidHook; tests assert telemetry shape without standing up
+// a full hook registry.
+export function passesCapabilityGateOrWarnForTests(
+  pluginId: string,
+  hookName: string,
+  logger: { warn?: (message: string) => void } | undefined,
+  options?: { seam?: string },
+): boolean {
+  return passesCapabilityGateOrWarn(pluginId, hookName, logger, options);
 }
 
 export function snapshotCapabilityViolationsForTests(): ReadonlyMap<string, number> {

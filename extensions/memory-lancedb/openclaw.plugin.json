@@ -1,13 +1,26 @@
 {
   "id": "memory-lancedb",
-  "commandAliases": [{ "name": "ltm" }],
+  "capabilities": {
+    "hooks": []
+  },
+  "commandAliases": [
+    {
+      "name": "ltm"
+    }
+  ],
   "activation": {
     "onStartup": false,
-    "onCommands": ["ltm"]
+    "onCommands": [
+      "ltm"
+    ]
   },
   "kind": "memory",
   "contracts": {
-    "tools": ["memory_forget", "memory_recall", "memory_store"]
+    "tools": [
+      "memory_forget",
+      "memory_recall",
+      "memory_store"
+    ]
   },
   "uiHints": {
     "embedding.apiKey": {
@@ -86,7 +99,6 @@
         "type": "object",
         "minProperties": 1,
         "additionalProperties": false,
-        "minProperties": 1,
         "properties": {
           "apiKey": {
             "type": "string"

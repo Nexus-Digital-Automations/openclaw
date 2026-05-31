@@ -1,5 +1,8 @@
 {
   "id": "inworld",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": false
   },
@@ -7,10 +10,14 @@
   "name": "Inworld",
   "description": "Inworld streaming text-to-speech (MP3, OGG_OPUS, PCM telephony).",
   "providerAuthEnvVars": {
-    "inworld": ["INWORLD_API_KEY"]
+    "inworld": [
+      "INWORLD_API_KEY"
+    ]
   },
   "contracts": {
-    "speechProviders": ["inworld"]
+    "speechProviders": [
+      "inworld"
+    ]
   },
   "configSchema": {
     "type": "object",

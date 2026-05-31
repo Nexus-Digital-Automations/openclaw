@@ -1,10 +1,20 @@
 {
   "id": "kimi",
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "kimi",
+      "kimi-coding"
+    ]
+  },
   "activation": {
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["kimi", "kimi-coding"],
+  "providers": [
+    "kimi",
+    "kimi-coding"
+  ],
   "providerRequest": {
     "providers": {
       "kimi": {
@@ -38,8 +48,14 @@
     }
   },
   "providerAuthEnvVars": {
-    "kimi": ["KIMI_API_KEY", "KIMICODE_API_KEY"],
-    "kimi-coding": ["KIMI_API_KEY", "KIMICODE_API_KEY"]
+    "kimi": [
+      "KIMI_API_KEY",
+      "KIMICODE_API_KEY"
+    ],
+    "kimi-coding": [
+      "KIMI_API_KEY",
+      "KIMICODE_API_KEY"
+    ]
   },
   "providerAuthChoices": [
     {

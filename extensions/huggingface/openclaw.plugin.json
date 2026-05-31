@@ -1,19 +1,32 @@
 {
   "id": "huggingface",
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "huggingface"
+    ]
+  },
   "activation": {
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["huggingface"],
+  "providers": [
+    "huggingface"
+  ],
   "modelIdNormalization": {
     "providers": {
       "huggingface": {
-        "stripPrefixes": ["huggingface/"]
+        "stripPrefixes": [
+          "huggingface/"
+        ]
       }
     }
   },
   "providerAuthEnvVars": {
-    "huggingface": ["HUGGINGFACE_HUB_TOKEN", "HF_TOKEN"]
+    "huggingface": [
+      "HUGGINGFACE_HUB_TOKEN",
+      "HF_TOKEN"
+    ]
   },
   "providerAuthChoices": [
     {
@@ -39,7 +52,9 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "enabled": { "type": "boolean" }
+          "enabled": {
+            "type": "boolean"
+          }
         }
       }
     }

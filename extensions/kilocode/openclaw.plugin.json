@@ -1,10 +1,18 @@
 {
   "id": "kilocode",
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "kilocode"
+    ]
+  },
   "activation": {
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["kilocode"],
+  "providers": [
+    "kilocode"
+  ],
   "modelPricing": {
     "providers": {
       "kilocode": {
@@ -18,7 +26,9 @@
     }
   },
   "providerAuthEnvVars": {
-    "kilocode": ["KILOCODE_API_KEY"]
+    "kilocode": [
+      "KILOCODE_API_KEY"
+    ]
   },
   "providerAuthChoices": [
     {
@@ -51,7 +61,10 @@
             "id": "kilo/auto",
             "name": "Kilo Auto",
             "reasoning": true,
-            "input": ["text", "image"],
+            "input": [
+              "text",
+              "image"
+            ],
             "cost": {
               "input": 0,
               "output": 0,

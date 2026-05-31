@@ -1,13 +1,20 @@
 {
   "id": "gradium",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": false
   },
   "providerAuthEnvVars": {
-    "gradium": ["GRADIUM_API_KEY"]
+    "gradium": [
+      "GRADIUM_API_KEY"
+    ]
   },
   "contracts": {
-    "speechProviders": ["gradium"]
+    "speechProviders": [
+      "gradium"
+    ]
   },
   "configSchema": {
     "type": "object",

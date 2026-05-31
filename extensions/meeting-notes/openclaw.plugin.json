@@ -1,16 +1,27 @@
 {
   "id": "meeting-notes",
+  "capabilities": {
+    "hooks": []
+  },
   "enabledByDefault": true,
   "activation": {
     "onStartup": false,
-    "onConfigPaths": ["plugins.entries.meeting-notes.config.autoStart"],
-    "onCommands": ["meeting-notes"]
+    "onConfigPaths": [
+      "plugins.entries.meeting-notes.config.autoStart"
+    ],
+    "onCommands": [
+      "meeting-notes"
+    ]
   },
   "name": "Meeting Notes",
   "description": "Capture meeting transcripts from channel-owned sources and write summaries.",
   "contracts": {
-    "meetingNotesSourceProviders": ["manual-transcript"],
-    "tools": ["meeting_notes"]
+    "meetingNotesSourceProviders": [
+      "manual-transcript"
+    ],
+    "tools": [
+      "meeting_notes"
+    ]
   },
   "commandAliases": [
     {
@@ -38,7 +49,9 @@
         "items": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["providerId"],
+          "required": [
+            "providerId"
+          ],
           "properties": {
             "enabled": {
               "type": "boolean",

@@ -1,12 +1,22 @@
 {
   "id": "litellm",
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "litellm"
+    ]
+  },
   "activation": {
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["litellm"],
+  "providers": [
+    "litellm"
+  ],
   "providerAuthEnvVars": {
-    "litellm": ["LITELLM_API_KEY"]
+    "litellm": [
+      "LITELLM_API_KEY"
+    ]
   },
   "providerAuthChoices": [
     {
@@ -25,7 +35,9 @@
     }
   ],
   "contracts": {
-    "imageGenerationProviders": ["litellm"]
+    "imageGenerationProviders": [
+      "litellm"
+    ]
   },
   "configSchema": {
     "type": "object",

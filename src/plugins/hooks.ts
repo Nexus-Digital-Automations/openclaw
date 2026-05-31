@@ -9,6 +9,11 @@ import { formatHookErrorForLog } from "../hooks/fire-and-forget.js";
 import { formatErrorMessage } from "../infra/errors.js";
 import { concatOptionalTextSegments } from "../shared/text/join-segments.js";
 import {
+  checkHookCapability,
+  getPluginCapabilities,
+  type PluginHookName as DeclaredPluginHookName,
+} from "./capabilities.js";
+import {
   type GateHookResult,
   type InputGateDecision,
   isHookDecision,
@@ -247,6 +252,77 @@ export type PluginTargetedInboundClaimOutcome =
       status: "error";
       error: string;
     };
+
+// C.3 — declared-surface hook names (subset of the PluginHookName union
+// that capability manifests can name). Hooks outside this set never go
+// through the capability gate (e.g. tool_result_persist, before_message_write
+// are sync-write integration hooks, not behavior hooks). Keep in sync with
+// capabilities.ts PluginHookName.
+const DECLARED_HOOK_NAMES = new Set<string>([
+  "before_prompt_build",
+  "before_tool_call",
+  "message_sending",
+  "post_tool_result",
+  "post_message_send",
+  "session_start",
+  "session_end",
+]);
+
+// Per-process counter for the warn-mode telemetry. Operators reading the
+// JSON log can sum these to size the manifest-backfill workload, or
+// flip warn → throw once the count steadies near zero post-C.4.
+const capabilityViolationCounters = new Map<string, number>();
+
+function recordCapabilityViolation(pluginId: string, hookName: string): void {
+  const key = `${pluginId}::${hookName}`;
+  capabilityViolationCounters.set(key, (capabilityViolationCounters.get(key) ?? 0) + 1);
+}
+
+/**
+ * C.3 warn-mode capability gate. Returns true when the hook is permitted
+ * to fire (declared OR not in the declared-surface vocabulary OR plugin
+ * has no manifest yet — grandfather), false-with-warn when the plugin
+ * declared a surface that excludes this hook. Warn-mode never blocks;
+ * the strict-mode flip (C.6) converts false return → throw.
+ *
+ * @stable
+ */
+function passesCapabilityGateOrWarn(
+  pluginId: string,
+  hookName: string,
+  logger: { warn?: (message: string) => void } | undefined,
+): boolean {
+  if (!DECLARED_HOOK_NAMES.has(hookName)) {
+    return true;
+  }
+  const capabilities = getPluginCapabilities(pluginId);
+  if (!capabilities) {
+    return true;
+  }
+  const verdict = checkHookCapability(capabilities, hookName as DeclaredPluginHookName);
+  if (verdict.ok) {
+    return true;
+  }
+  recordCapabilityViolation(pluginId, hookName);
+  logger?.warn?.(
+    JSON.stringify({
+      event: "plugin.capability.violation_observed",
+      pluginId,
+      hookName,
+      reason: verdict.reason,
+      declared: capabilities.hooks ?? [],
+    }),
+  );
+  return true;
+}
+
+export function snapshotCapabilityViolationsForTests(): ReadonlyMap<string, number> {
+  return new Map(capabilityViolationCounters);
+}
+
+export function resetCapabilityViolationsForTests(): void {
+  capabilityViolationCounters.clear();
+}
 
 type SyncHookName = "tool_result_persist" | "before_message_write";
 type SyncHookHandler<K extends SyncHookName> = NonNullable<PluginHookRegistration<K>["handler"]>;
@@ -568,6 +644,9 @@ export function createHookRunner(
     logger?.debug?.(`[hooks] running ${hookName} (${hooks.length} handlers)`);
 
     const promises = hooks.map(async (hook) => {
+      if (!passesCapabilityGateOrWarn(hook.pluginId, hookName, logger)) {
+        return;
+      }
       try {
         const promise = Promise.resolve(
           (hook.handler as (event: unknown, ctx: unknown) => Promise<void> | void)(event, ctx),

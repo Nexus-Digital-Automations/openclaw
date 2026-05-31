@@ -17,6 +17,7 @@ import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
 import { resolveProviderAuthProfileId } from "../../plugins/provider-runtime.js";
 import { enqueueCommandInLane } from "../../process/command-queue.js";
 import type { CommandQueueEnqueueOptions } from "../../process/command-queue.types.js";
+import { setExternalContentTouchScope } from "../../shared/process-external-content-bodies.js";
 import { normalizeOptionalString } from "../../shared/string-coerce.js";
 import { createAgentHarnessTaskRuntimeScope } from "../../tasks/agent-harness-task-runtime-scope.js";
 import { sanitizeForLog } from "../../terminal/ansi.js";
@@ -417,6 +418,11 @@ export async function runEmbeddedPiAgent(
   if (effectiveSessionKey !== params.sessionKey) {
     params = { ...params, sessionKey: effectiveSessionKey };
   }
+  // D.5 — scope external-content recordings to this turn's correlationId so
+  // D.6 can ask "did this turn touch untrusted content" at turn-end. Cleared
+  // in the matching finally block; the disk taint store at
+  // logs/context-taint.ndjson is the cross-restart channel D.6 writes.
+  setExternalContentTouchScope(params.runId);
   const sessionLane = resolveSessionLane(params.sessionKey?.trim() || params.sessionId);
   const globalLane = resolveGlobalLane(params.lane);
   const sessionQueuePriority = resolveEmbeddedRunSessionQueuePriority(params.trigger);

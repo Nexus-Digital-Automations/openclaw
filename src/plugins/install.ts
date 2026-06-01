@@ -1662,8 +1662,13 @@ async function installPluginFromPackageDir(
       // C.2 — publish the verified capability surface to the runtime cache
       // so the warn-mode hook gate (C.3) and downstream HTTP/FS guards (E)
       // can read it via getPluginCapabilities(pluginId).
-      const { setPluginCapabilities } = await import("./capabilities.js");
+      const { setPluginCapabilities, setPluginCapabilityEnforcement } =
+        await import("./capabilities.js");
       setPluginCapabilities(plugin.pluginId, signingResult.capabilities);
+      // F.4 — a package install is always external; opt it into the hard-block
+      // gate in-process now, so enforcement does not wait for the next
+      // load-time hydration pass.
+      setPluginCapabilityEnforcement(plugin.pluginId, "enforced");
     }
   }
 

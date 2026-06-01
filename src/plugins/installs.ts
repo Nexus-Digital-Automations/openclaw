@@ -18,12 +18,18 @@ export function recordPluginInstall(
   update: PluginInstallUpdate,
 ): OpenClawConfig {
   const { pluginId, ...record } = update;
+  const previous = cfg.plugins?.installs?.[pluginId];
   const installs = {
     ...cfg.plugins?.installs,
     [pluginId]: {
-      ...cfg.plugins?.installs?.[pluginId],
+      ...previous,
       ...record,
       installedAt: record.installedAt ?? new Date().toISOString(),
+      // F.4 — every record written here is an external install (npm/clawhub/
+      // git/path/archive; bundled plugins are never recorded). New installs
+      // opt into the hard-block capability gate; an explicit update value or a
+      // prior stamp wins so a re-record never silently downgrades enforcement.
+      capabilityGate: record.capabilityGate ?? previous?.capabilityGate ?? "enforced",
     },
   };
 

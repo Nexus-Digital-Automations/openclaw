@@ -12,6 +12,7 @@ import {
   checkHookCapability,
   DECLARED_PLUGIN_HOOK_NAMES,
   getPluginCapabilities,
+  getPluginCapabilityEnforcement,
   type PluginHookName as DeclaredPluginHookName,
 } from "./capabilities.js";
 import {
@@ -279,12 +280,15 @@ function recordCapabilityViolation(pluginId: string, hookName: string, seam: str
 }
 
 /**
- * C.6 strict-mode capability gate. Returns true when the hook is permitted
- * to fire (declared OR not in the declared-surface vocabulary OR plugin
- * has no manifest yet — grandfather). Throws CapabilityDeniedError when
- * the plugin declared a surface that excludes this hook — the C.6 flip
- * from C.3's warn-only behavior. Plugins without manifests still
- * grandfather through, matching the pre-C.6 telemetry semantics.
+ * Capability gate (C.6 strict-flip × F.4 enforcement tiers). Returns true when
+ * the hook may fire (declared OR not in the declared-surface vocabulary OR
+ * plugin has no manifest yet — grandfather). On a declared-surface violation
+ * the outcome depends on the plugin's enforcement mode (F.4):
+ * "enforced" plugins (new external installs) are hard-failed — throws
+ * CapabilityDeniedError (C.6) and logs `violation_blocked`; "grandfathered" /
+ * unstamped plugins (bundled + pre-feature installs) stay warn-mode — returns
+ * true and logs `violation_observed`. Plugins without manifests grandfather
+ * through unconditionally, matching the pre-C.6 telemetry semantics.
  *
  * @stable
  */
@@ -307,9 +311,12 @@ function passesCapabilityGateOrWarn(
   }
   const seam = options?.seam ?? "runVoidHook";
   recordCapabilityViolation(pluginId, hookName, seam);
+  const blocked = getPluginCapabilityEnforcement(pluginId) === "enforced";
   logger?.warn?.(
     JSON.stringify({
-      event: "plugin.capability.denied",
+      event: blocked
+        ? "plugin.capability.violation_blocked"
+        : "plugin.capability.violation_observed",
       pluginId,
       hookName,
       seam,
@@ -317,13 +324,18 @@ function passesCapabilityGateOrWarn(
       declared: capabilities.hooks ?? [],
     }),
   );
-  throw new CapabilityDeniedError({
-    pluginId,
-    hookName,
-    seam,
-    reason: verdict.reason,
-    declared: capabilities.hooks ?? [],
-  });
+  if (blocked) {
+    throw new CapabilityDeniedError({
+      pluginId,
+      hookName,
+      seam,
+      reason: verdict.reason,
+      declared: capabilities.hooks ?? [],
+    });
+  }
+  // Grandfathered / unstamped plugins stay warn-and-run: telemetry recorded
+  // above, handler still fires so bundled + pre-feature installs don't break.
+  return true;
 }
 
 /**

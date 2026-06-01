@@ -208,6 +208,27 @@ detected prefixes and the total count. Rename each value by replacing the
 legacy prefix with `OPENCLAW_` (for example `CLAWDBOT_GATEWAY_TOKEN` →
 `OPENCLAW_GATEWAY_TOKEN`); the old names take no effect.
 
+## Plugin signing
+
+Plugin install-signing enforcement is opt-in during rollout. These variables
+control it; signing is dormant unless you set them.
+
+- **`OPENCLAW_REQUIRE_SIGNED_PLUGINS`** (runtime, default off) — set to `1`,
+  `true`, or `yes` to refuse installing a plugin that is unsigned. With it
+  unset, a missing `openclaw.plugin.sig` sidecar only warns and the install
+  proceeds; a present-but-invalid, revoked, or policy-denied signature always
+  refuses regardless of this flag.
+- **`OPENCLAW_FIRST_PARTY_FINGERPRINT`** (release-build only) — the 32-hex
+  first-party publisher fingerprint (signing trust root). Release builds stamp
+  it into `dist/build-info.json`; a runtime value is the secondary source.
+  Source/dev builds omit it and fall back to an all-zeros placeholder that
+  matches no real key, so they trust only explicitly `openclaw plugins trust`-ed
+  publishers. A malformed value is ignored, never fatal.
+- **`OPENCLAW_PLUGIN_SIGNING_KEY`** (build only) — path to the Ed25519 private
+  key PEM used by `pnpm plugins:sign:bundled` to sign bundled plugins at release
+  time. Never commit a private key. With no key the signing step is a clean
+  no-op (bundled plugins ship unsigned, dormant).
+
 ## Related
 
 - [Gateway configuration](/gateway/configuration)

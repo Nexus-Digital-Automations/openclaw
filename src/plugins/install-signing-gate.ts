@@ -9,7 +9,6 @@
 // can early-return without try/catch on the hot path. Security events MUST be
 // surfaced; the named codes below are stable.
 
-import crypto from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -90,6 +89,7 @@ export async function enforcePluginInstallSignature(
   }
   const raw = await readFile(sidecarPath, "utf8");
   const sidecar = parsePluginSignatureSidecar(raw);
+  const { canonicalPluginHashHex } = await import("./plugins-lock.runtime.js");
   const pluginHash = await canonicalPluginHashHex(opts.packageDir);
   if (sidecar.plugin_hash !== pluginHash) {
     return {
@@ -170,15 +170,4 @@ function checkPublisherPolicy(params: {
     };
   }
   return { ok: true };
-}
-
-async function canonicalPluginHashHex(pluginRoot: string): Promise<string> {
-  // Mirrors `cli/plugins-sign-command.ts` so signing and the install gate
-  // hash the same canonical bytes. The sidecar is excluded — signing writes
-  // it AFTER hashing, so including it here would break verification.
-  const { hashPluginSourceTree } = await import("./plugins-lock.runtime.js");
-  const files = { ...(await hashPluginSourceTree(pluginRoot)) };
-  delete (files as Record<string, unknown>)[PLUGIN_SIGNATURE_SIDECAR_FILENAME];
-  const canonical = JSON.stringify(files);
-  return crypto.createHash("sha256").update(canonical, "utf8").digest("hex");
 }

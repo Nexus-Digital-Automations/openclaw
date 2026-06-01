@@ -20,7 +20,9 @@ import {
   resolveKnownPublishersPath,
   signPluginHash,
   verifyPluginSignature,
+  FIRST_PARTY_FINGERPRINT_PLACEHOLDER,
   FIRST_PARTY_PUBLISHER_FINGERPRINT,
+  isFirstPartyFingerprintShape,
 } from "./plugin-signing.js";
 
 let workspaceDir = "";
@@ -192,5 +194,28 @@ describe("private key file mode", () => {
     const stat = statSync(kp.privateKeyPath);
     // mode bits low 9 bits = perms; 0o600 = owner read/write only.
     expect(stat.mode & 0o777).toBe(0o600);
+  });
+});
+
+describe("first-party fingerprint trust root", () => {
+  it("stays dormant (all-zeros placeholder) in an unconfigured build", () => {
+    // No build-info.json stamp and no OPENCLAW_FIRST_PARTY_FINGERPRINT in the
+    // test env, so the resolved trust root must be the sentinel that matches no
+    // real key — never an accidental fingerprint.
+    expect(FIRST_PARTY_PUBLISHER_FINGERPRINT).toBe(FIRST_PARTY_FINGERPRINT_PLACEHOLDER);
+    expect(FIRST_PARTY_FINGERPRINT_PLACEHOLDER).toBe("0".repeat(32));
+  });
+
+  it("accepts a canonical 32-lowercase-hex fingerprint", () => {
+    const kp = generateSigningKeypair(workspaceDir);
+    expect(isFirstPartyFingerprintShape(kp.publisher.fingerprint)).toBe(true);
+    expect(isFirstPartyFingerprintShape(FIRST_PARTY_FINGERPRINT_PLACEHOLDER)).toBe(true);
+  });
+
+  it("rejects malformed fingerprints (wrong length, uppercase, undefined)", () => {
+    expect(isFirstPartyFingerprintShape("abc")).toBe(false);
+    expect(isFirstPartyFingerprintShape("A".repeat(32))).toBe(false);
+    expect(isFirstPartyFingerprintShape("g".repeat(32))).toBe(false);
+    expect(isFirstPartyFingerprintShape(undefined)).toBe(false);
   });
 });

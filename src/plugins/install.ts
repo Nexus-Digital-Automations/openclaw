@@ -1195,6 +1195,63 @@ async function resolveEffectiveInstallMode(params: {
   return (await params.runtime.fileExists(params.targetPath)) ? "update" : "install";
 }
 
+/**
+ * Run the P1.7 signing gate for a prepared source dir and publish the verified
+ * capability surface. Shared by the package and bundle install funnels so
+ * neither can bypass signature/publisher policy or the F.4 capability
+ * hard-block. Default-off rollout: when OPENCLAW_REQUIRE_SIGNED_PLUGINS is unset
+ * a missing sidecar only warns (existing unsigned plugins keep installing);
+ * tampered/untrusted/revoked/policy-denied sidecars always refuse.
+ *
+ * Returns ok:false with the refusal code only when the install must abort.
+ */
+async function applyInstallSigningGate(params: {
+  sourceDir: string;
+  pluginId: string;
+  allowUnsigned: boolean;
+  logger: PluginInstallLogger;
+}): Promise<{ ok: true } | { ok: false; error: string; code: PluginInstallErrorCode }> {
+  const enforcementEnabled = isPluginSigningEnforcementEnabled();
+  if (!enforcementEnabled && params.allowUnsigned) {
+    return { ok: true };
+  }
+  const { enforcePluginInstallSignature } = await import("./install-signing-gate.js");
+  // Resolve publisher policy here so it applies uniformly to every install
+  // source; wiring it per call site would leave bypass holes.
+  const pluginsCfg = getRuntimeConfig({ skipPluginValidation: true }).plugins;
+  const publisherPolicy = pluginsCfg?.publisherPolicy;
+  const requirePublisher = pluginsCfg?.entries?.[params.pluginId]?.requirePublisher;
+  const signingResult = await enforcePluginInstallSignature({
+    packageDir: params.sourceDir,
+    pluginId: params.pluginId,
+    allowUnsigned: params.allowUnsigned,
+    ...(publisherPolicy ? { publisherPolicy } : {}),
+    ...(requirePublisher ? { requirePublisher } : {}),
+  });
+  if (!signingResult.ok) {
+    const isMissingOnly = signingResult.code === "plugin.install.unsigned";
+    if (!enforcementEnabled && isMissingOnly) {
+      params.logger.warn?.(
+        `plugin "${params.pluginId}" has no openclaw.plugin.sig sidecar; install proceeding (set OPENCLAW_REQUIRE_SIGNED_PLUGINS=1 to enforce)`,
+      );
+      return { ok: true };
+    }
+    params.logger.warn?.(`plugin install refused: ${signingResult.code} ${signingResult.reason}`);
+    return { ok: false, error: signingResult.reason, code: signingResult.code };
+  }
+  if (signingResult.capabilities) {
+    // C.2 — publish the verified capability surface so the hook gate (C.3) and
+    // HTTP/FS guards (E) can read it. F.4 — an explicit install is external;
+    // opt it into the hard-block gate now rather than wait for load-time
+    // hydration.
+    const { setPluginCapabilities, setPluginCapabilityEnforcement } =
+      await import("./capabilities.js");
+    setPluginCapabilities(params.pluginId, signingResult.capabilities);
+    setPluginCapabilityEnforcement(params.pluginId, "enforced");
+  }
+  return { ok: true };
+}
+
 async function installBundleFromSourceDir(
   params: {
     sourceDir: string;
@@ -1258,6 +1315,19 @@ async function installBundleFromSourceDir(
   });
   if (scanResult) {
     return scanResult;
+  }
+
+  // Same signing gate as the package funnel — a bundle install must not bypass
+  // signature/publisher policy or the F.4 capability hard-block. Default-off:
+  // behavior-neutral until OPENCLAW_REQUIRE_SIGNED_PLUGINS=1.
+  const bundleSigningGate = await applyInstallSigningGate({
+    sourceDir: params.sourceDir,
+    pluginId,
+    allowUnsigned: params.allowUnsigned === true || params.dangerouslyForceUnsafeInstall === true,
+    logger,
+  });
+  if (!bundleSigningGate.ok) {
+    return { ok: false, error: bundleSigningGate.error, code: bundleSigningGate.code };
   }
 
   return await installPluginDirectoryIntoExtensions({
@@ -1631,56 +1701,17 @@ async function installPluginFromPackageDir(
   }
   const { plugin } = validated;
 
-  // P1.7 signing gate. Refuses unsigned/untrusted plugins BEFORE any disk
-  // mutation. Default behavior is opt-in by environment flag during rollout —
-  // operators flip OPENCLAW_REQUIRE_SIGNED_PLUGINS=1 to take effect. Once the
-  // ecosystem has reissued signed sidecars (tracked in the P1.7 follow-up),
-  // the default flips to enforce-on. `--allow-unsigned` (params.allowUnsigned)
-  // and the existing `dangerouslyForceUnsafeInstall` flag both bypass the
+  // P1.7 signing gate — refuses unsigned/untrusted plugins BEFORE any disk
+  // mutation. `--allow-unsigned` / `dangerouslyForceUnsafeInstall` bypass the
   // missing-sidecar branch only; tampered or untrusted sidecars always refuse.
-  const enforcementEnabled = isPluginSigningEnforcementEnabled();
-  const allowUnsigned =
-    params.allowUnsigned === true || params.dangerouslyForceUnsafeInstall === true;
-  if (enforcementEnabled || !allowUnsigned) {
-    const { enforcePluginInstallSignature } = await import("./install-signing-gate.js");
-    // T — resolve the publisher policy at this single install funnel so it
-    // applies uniformly to every install source (npm/clawhub/git/path/archive);
-    // wiring it per call site would leave bypass holes. pluginId is known here.
-    const pluginsCfg = getRuntimeConfig({ skipPluginValidation: true }).plugins;
-    const publisherPolicy = pluginsCfg?.publisherPolicy;
-    const requirePublisher = pluginsCfg?.entries?.[plugin.pluginId]?.requirePublisher;
-    const signingResult = await enforcePluginInstallSignature({
-      packageDir: params.packageDir,
-      pluginId: plugin.pluginId,
-      allowUnsigned,
-      ...(publisherPolicy ? { publisherPolicy } : {}),
-      ...(requirePublisher ? { requirePublisher } : {}),
-    });
-    if (!signingResult.ok) {
-      // Soft-rollout: when the env flag is off and the only failure is the
-      // missing sidecar, treat it as a warning so existing unsigned plugins
-      // keep installing. Real signature/publisher failures always refuse.
-      const isMissingOnly = signingResult.code === "plugin.install.unsigned";
-      if (!enforcementEnabled && isMissingOnly) {
-        logger.warn?.(
-          `plugin "${plugin.pluginId}" has no openclaw.plugin.sig sidecar; install proceeding (set OPENCLAW_REQUIRE_SIGNED_PLUGINS=1 to enforce)`,
-        );
-      } else {
-        logger.warn?.(`plugin install refused: ${signingResult.code} ${signingResult.reason}`);
-        return { ok: false, error: signingResult.reason, code: signingResult.code };
-      }
-    } else if (signingResult.capabilities) {
-      // C.2 — publish the verified capability surface to the runtime cache
-      // so the warn-mode hook gate (C.3) and downstream HTTP/FS guards (E)
-      // can read it via getPluginCapabilities(pluginId).
-      const { setPluginCapabilities, setPluginCapabilityEnforcement } =
-        await import("./capabilities.js");
-      setPluginCapabilities(plugin.pluginId, signingResult.capabilities);
-      // F.4 — a package install is always external; opt it into the hard-block
-      // gate in-process now, so enforcement does not wait for the next
-      // load-time hydration pass.
-      setPluginCapabilityEnforcement(plugin.pluginId, "enforced");
-    }
+  const packageSigningGate = await applyInstallSigningGate({
+    sourceDir: params.packageDir,
+    pluginId: plugin.pluginId,
+    allowUnsigned: params.allowUnsigned === true || params.dangerouslyForceUnsafeInstall === true,
+    logger,
+  });
+  if (!packageSigningGate.ok) {
+    return { ok: false, error: packageSigningGate.error, code: packageSigningGate.code };
   }
 
   preparedTarget = await resolvePreparedTargetForPluginId(plugin.pluginId);

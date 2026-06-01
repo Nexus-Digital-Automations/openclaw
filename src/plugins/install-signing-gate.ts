@@ -20,10 +20,8 @@ import {
   parsePluginSignatureSidecar,
   verifyPluginSignature,
 } from "../security/plugin-signing.js";
-import {
-  normalizeCapabilitiesManifest,
-  type PluginCapabilities,
-} from "./capabilities.js";
+import { type PluginCapabilities } from "./capabilities.js";
+import { loadPluginCapabilitiesFromDir } from "./plugin-capabilities-manifest.js";
 
 export const PLUGIN_INSTALL_SIGNING_ERROR_CODE = {
   UNSIGNED: "plugin.install.unsigned",
@@ -107,7 +105,7 @@ export async function enforcePluginInstallSignature(
       reason: `publisher ${sidecar.publisher.fingerprint} is not in known-publishers and is not first-party`,
     };
   }
-  const capabilitiesResult = await loadCapabilitiesFromManifest(opts.packageDir);
+  const capabilitiesResult = loadPluginCapabilitiesFromDir(opts.packageDir);
   if (!capabilitiesResult.ok) {
     return {
       ok: false,
@@ -120,42 +118,6 @@ export async function enforcePluginInstallSignature(
     publisherFingerprint: sidecar.publisher.fingerprint,
     ...(capabilitiesResult.capabilities ? { capabilities: capabilitiesResult.capabilities } : {}),
   };
-}
-
-async function loadCapabilitiesFromManifest(
-  packageDir: string,
-): Promise<
-  | { ok: true; capabilities?: PluginCapabilities }
-  | { ok: false; reason: string }
-> {
-  const manifestPath = path.join(packageDir, "openclaw.plugin.json");
-  if (!existsSync(manifestPath)) {
-    return { ok: true };
-  }
-  let raw: string;
-  try {
-    raw = await readFile(manifestPath, "utf8");
-  } catch (err) {
-    return { ok: false, reason: `failed to read openclaw.plugin.json: ${String(err)}` };
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (err) {
-    return { ok: false, reason: `openclaw.plugin.json is not valid JSON: ${String(err)}` };
-  }
-  if (!parsed || typeof parsed !== "object") {
-    return { ok: false, reason: "openclaw.plugin.json root must be an object" };
-  }
-  const capabilitiesField = (parsed as Record<string, unknown>).capabilities;
-  if (capabilitiesField === undefined) {
-    return { ok: true };
-  }
-  const capabilities = normalizeCapabilitiesManifest(capabilitiesField);
-  if (capabilities === null) {
-    return { ok: false, reason: "openclaw.plugin.json capabilities must be an object" };
-  }
-  return { ok: true, capabilities };
 }
 
 async function canonicalPluginHashHex(pluginRoot: string): Promise<string> {

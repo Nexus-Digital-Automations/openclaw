@@ -18,6 +18,7 @@ import {
   clearPluginCapabilitiesForTests,
   DECLARED_PLUGIN_HOOK_NAMES,
   setPluginCapabilities,
+  setPluginCapabilityEnforcement,
 } from "./capabilities.js";
 import {
   passesCapabilityGateOrWarnForTests,
@@ -143,6 +144,53 @@ describe("passesCapabilityGateOrWarn — per-seam telemetry", () => {
     const counters = snapshotCapabilityViolationsForTests();
     expect(counters.get(`${PLUGIN_ID}::before_tool_call::runVoidHook`)).toBe(1);
     expect(counters.get(`${PLUGIN_ID}::before_tool_call::runClaimingHooksList`)).toBe(1);
+  });
+});
+
+describe("passesCapabilityGateOrWarn — enforced mode (F.4 hard-block)", () => {
+  it("blocks an enforced plugin's undeclared hook: returns false, logs violation_blocked", () => {
+    setPluginCapabilities(PLUGIN_ID, { hooks: ["before_prompt_build"] });
+    setPluginCapabilityEnforcement(PLUGIN_ID, "enforced");
+    const warn = vi.fn();
+    const allowed = passesCapabilityGateOrWarnForTests(
+      PLUGIN_ID,
+      "before_tool_call",
+      { warn },
+      { seam: "runVoidHook" },
+    );
+    expect(allowed).toBe(false);
+    const payload = JSON.parse(warn.mock.calls[0][0]);
+    expect(payload.event).toBe("plugin.capability.violation_blocked");
+    expect(payload.pluginId).toBe(PLUGIN_ID);
+  });
+
+  it("warns but allows a grandfathered plugin's undeclared hook: returns true", () => {
+    setPluginCapabilities(PLUGIN_ID, { hooks: ["before_prompt_build"] });
+    setPluginCapabilityEnforcement(PLUGIN_ID, "grandfathered");
+    const warn = vi.fn();
+    const allowed = passesCapabilityGateOrWarnForTests(
+      PLUGIN_ID,
+      "before_tool_call",
+      { warn },
+      { seam: "runVoidHook" },
+    );
+    expect(allowed).toBe(true);
+    const payload = JSON.parse(warn.mock.calls[0][0]);
+    expect(payload.event).toBe("plugin.capability.violation_observed");
+  });
+
+  it("still allows an enforced plugin's declared hook without telemetry", () => {
+    setPluginCapabilities(PLUGIN_ID, { hooks: ["before_tool_call"] });
+    setPluginCapabilityEnforcement(PLUGIN_ID, "enforced");
+    const warn = vi.fn();
+    const allowed = passesCapabilityGateOrWarnForTests(
+      PLUGIN_ID,
+      "before_tool_call",
+      { warn },
+      { seam: "runVoidHook" },
+    );
+    expect(allowed).toBe(true);
+    expect(warn).not.toHaveBeenCalled();
   });
 });
 

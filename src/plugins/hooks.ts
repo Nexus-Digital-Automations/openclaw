@@ -12,6 +12,7 @@ import {
   checkHookCapability,
   DECLARED_PLUGIN_HOOK_NAMES,
   getPluginCapabilities,
+  getPluginCapabilityEnforcement,
   type PluginHookName as DeclaredPluginHookName,
 } from "./capabilities.js";
 import {
@@ -279,11 +280,13 @@ function recordCapabilityViolation(pluginId: string, hookName: string, seam: str
 }
 
 /**
- * C.3 warn-mode capability gate. Returns true when the hook is permitted
- * to fire (declared OR not in the declared-surface vocabulary OR plugin
- * has no manifest yet — grandfather), false-with-warn when the plugin
- * declared a surface that excludes this hook. Warn-mode never blocks;
- * the strict-mode flip (C.6) converts false return → throw.
+ * Capability gate. Returns true when the hook may fire (declared OR not in the
+ * declared-surface vocabulary OR plugin has no manifest — grandfather). On a
+ * declared-surface violation the outcome depends on the plugin's enforcement
+ * mode (F.4): "enforced" plugins (new external installs) are hard-blocked —
+ * returns false so `runVoidHook` skips the handler — and logged as
+ * `violation_blocked`; "grandfathered" / unstamped plugins (bundled +
+ * pre-feature installs) stay warn-mode — returns true, `violation_observed`.
  *
  * @stable
  */
@@ -306,9 +309,12 @@ function passesCapabilityGateOrWarn(
   }
   const seam = options?.seam ?? "runVoidHook";
   recordCapabilityViolation(pluginId, hookName, seam);
+  const blocked = getPluginCapabilityEnforcement(pluginId) === "enforced";
   logger?.warn?.(
     JSON.stringify({
-      event: "plugin.capability.violation_observed",
+      event: blocked
+        ? "plugin.capability.violation_blocked"
+        : "plugin.capability.violation_observed",
       pluginId,
       hookName,
       seam,
@@ -316,7 +322,7 @@ function passesCapabilityGateOrWarn(
       declared: capabilities.hooks ?? [],
     }),
   );
-  return true;
+  return !blocked;
 }
 
 // Test-only: drive the gate directly. Production code paths invoke the

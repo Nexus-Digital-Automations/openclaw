@@ -246,14 +246,55 @@ export function getPluginCapabilities(pluginId: string): PluginCapabilities | un
   return pluginCapabilitiesById.get(pluginId);
 }
 
+export type PluginCapabilityEnforcement = "enforced" | "grandfathered";
+
+// F.4 — per-plugin gate mode, derived from the install record's `capabilityGate`
+// stamp at install and re-hydrated at load. "enforced" (new external installs)
+// hard-blocks undeclared hooks; "grandfathered" / absent (bundled + pre-feature
+// installs) stays warn-mode.
+const pluginCapabilityEnforcementById = new Map<string, PluginCapabilityEnforcement>();
+
 /**
- * Test-only: wipe the per-process capability cache between tests so a
- * registration in one test cannot leak into the next.
+ * Record a plugin's capability-gate enforcement mode. Set alongside
+ * `setPluginCapabilities` at install and at load-time hydration. Idempotent.
+ *
+ * @stable
+ */
+export function setPluginCapabilityEnforcement(
+  pluginId: string,
+  mode: PluginCapabilityEnforcement,
+): void {
+  if (typeof pluginId !== "string" || pluginId.length === 0) {
+    return;
+  }
+  pluginCapabilityEnforcementById.set(pluginId, mode);
+}
+
+/**
+ * Look up a plugin's enforcement mode. `undefined` means the plugin was never
+ * stamped (bundled / pre-feature install) — callers treat that as
+ * "grandfathered" (warn-mode), never as "enforced".
+ *
+ * @stable
+ */
+export function getPluginCapabilityEnforcement(
+  pluginId: string,
+): PluginCapabilityEnforcement | undefined {
+  if (typeof pluginId !== "string" || pluginId.length === 0) {
+    return undefined;
+  }
+  return pluginCapabilityEnforcementById.get(pluginId);
+}
+
+/**
+ * Test-only: wipe the per-process capability + enforcement caches between
+ * tests so a registration in one test cannot leak into the next.
  *
  * @internal
  */
 export function clearPluginCapabilitiesForTests(): void {
   pluginCapabilitiesById.clear();
+  pluginCapabilityEnforcementById.clear();
 }
 
 // C.3 — single source of truth for the declarable hook surface. Exported

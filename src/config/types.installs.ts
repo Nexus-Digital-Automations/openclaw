@@ -27,4 +27,8 @@ export type InstallRecordBase = {
   gitUrl?: string;
   gitRef?: string;
   gitCommit?: string;
+  // F.4 — capability-gate enforcement mode, stamped once at install. "enforced"
+  // = new external install subject to the hard-block hook gate; absent or
+  // "grandfathered" = warn-mode (bundled + installs predating the gate flip).
+  capabilityGate?: "enforced" | "grandfathered";
 };

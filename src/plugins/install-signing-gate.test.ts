@@ -18,6 +18,7 @@ import {
   enforcePluginInstallSignature,
   PLUGIN_INSTALL_SIGNING_ERROR_CODE,
 } from "./install-signing-gate.js";
+import { canonicalPluginHashHex } from "./plugins-lock.runtime.js";
 
 let workspaceDir = "";
 let pluginDir = "";
@@ -217,5 +218,25 @@ describe("sidecar stability", () => {
     // the first run because the sidecar is regenerated, not hashed.
     await signFixturePluginWithFreshKey();
     expect(existsSync(path.join(pluginDir, PLUGIN_SIGNATURE_SIDECAR_FILENAME))).toBe(true);
+  });
+});
+
+// canonicalPluginHashHex is the single shared helper the `plugins sign` CLI,
+// the install gate, and the bundled-plugin build signer all hash through, so
+// build-time signing and install-time verification cannot drift.
+describe("canonicalPluginHashHex (shared signing hash)", () => {
+  it("is stable and excludes the signature sidecar", async () => {
+    const before = await canonicalPluginHashHex(pluginDir);
+    await signFixturePluginWithFreshKey();
+    // Writing the sidecar into the plugin dir must not change the hash.
+    const after = await canonicalPluginHashHex(pluginDir);
+    expect(after).toBe(before);
+  });
+
+  it("changes when a source file changes (tamper detection)", async () => {
+    const before = await canonicalPluginHashHex(pluginDir);
+    writeFileSync(path.join(pluginDir, "index.js"), "export const id = 'tampered';\n");
+    const after = await canonicalPluginHashHex(pluginDir);
+    expect(after).not.toBe(before);
   });
 });

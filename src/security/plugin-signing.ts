@@ -19,21 +19,65 @@
 
 import crypto from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { resolveRequiredHomeDir } from "../infra/home-dir.js";
 
-// First-party (OpenClaw maintainer) publisher fingerprint, injected at build
-// via OPENCLAW_FIRST_PARTY_FINGERPRINT (release builds set it; mirrors the
-// OPENCLAW_BUNDLED_VERSION pattern in version.ts). Source / unconfigured builds
-// fall back to the all-zeros placeholder, which matches no real Ed25519
-// fingerprint — so they trust only explicitly `plugins trust`-ed publishers,
-// never an accidental key. TODO: P3.3 sigstore transparency log supersedes this.
-const FIRST_PARTY_FINGERPRINT_PLACEHOLDER =
-  "0000000000000000000000000000000000000000000000000000000000000000".slice(0, 32);
-export const FIRST_PARTY_PUBLISHER_FINGERPRINT =
-  process.env.OPENCLAW_FIRST_PARTY_FINGERPRINT?.trim() || FIRST_PARTY_FINGERPRINT_PLACEHOLDER;
-
+// First-party (OpenClaw maintainer) publisher fingerprint — the signing trust
+// root. Resolution order, all validated to 32 lowercase hex chars:
+//   1. dist/build-info.json `firstPartyFingerprint` — release builds stamp it
+//      (scripts/write-build-info.ts), mirroring the version stamp in version.ts.
+//   2. OPENCLAW_FIRST_PARTY_FINGERPRINT env var — runtime override / non-bundled.
+//   3. all-zeros placeholder — source / dev / unconfigured builds. It matches no
+//      real Ed25519 fingerprint, so such builds trust only explicitly
+//      `plugins trust`-ed publishers, never an accidental key.
+// TODO: P3.3 sigstore transparency log supersedes this.
 const FINGERPRINT_HEX_LENGTH = 32;
+/** All-zeros trust-root sentinel for unconfigured builds; matches no real key. @internal */
+export const FIRST_PARTY_FINGERPRINT_PLACEHOLDER = "0".repeat(FINGERPRINT_HEX_LENGTH);
+const FIRST_PARTY_FINGERPRINT_PATTERN = /^[0-9a-f]{32}$/;
+
+/** True for a canonical 32-lowercase-hex publisher fingerprint. @internal */
+export function isFirstPartyFingerprintShape(value: string | undefined): value is string {
+  return typeof value === "string" && FIRST_PARTY_FINGERPRINT_PATTERN.test(value);
+}
+
+// Read the build-stamped fingerprint from dist/build-info.json at load. Returns
+// undefined when there is no build-info (source/dev) or the field is
+// absent/malformed, so resolution falls through to env then placeholder — a
+// malformed stamp must never throw and break startup.
+function readBuildStampedFirstPartyFingerprint(): string | undefined {
+  try {
+    const requireFromHere = createRequire(import.meta.url);
+    for (const candidate of ["../build-info.json", "../../build-info.json", "./build-info.json"]) {
+      try {
+        const parsed = requireFromHere(candidate) as { firstPartyFingerprint?: unknown };
+        const value =
+          typeof parsed.firstPartyFingerprint === "string"
+            ? parsed.firstPartyFingerprint.trim().toLowerCase()
+            : undefined;
+        if (isFirstPartyFingerprintShape(value)) {
+          return value;
+        }
+      } catch {
+        // missing or unreadable candidate — try the next
+      }
+    }
+  } catch {
+    // createRequire unavailable in this runtime
+  }
+  return undefined;
+}
+
+function resolveFirstPartyPublisherFingerprint(): string {
+  const fromEnv = process.env.OPENCLAW_FIRST_PARTY_FINGERPRINT?.trim().toLowerCase();
+  return (
+    readBuildStampedFirstPartyFingerprint() ??
+    (isFirstPartyFingerprintShape(fromEnv) ? fromEnv : FIRST_PARTY_FINGERPRINT_PLACEHOLDER)
+  );
+}
+
+export const FIRST_PARTY_PUBLISHER_FINGERPRINT = resolveFirstPartyPublisherFingerprint();
 
 export type PublisherIdentity = {
   /** sha256(publicKey raw bytes) hex, truncated to 32 chars. */

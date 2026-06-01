@@ -34,13 +34,33 @@ const resolveCommit = () => {
   }
 };
 
+// Stamp the first-party signing trust root only when a release build supplies
+// it; normal/dev/CI builds omit it so the runtime falls back to the all-zeros
+// placeholder (signing stays dormant). A malformed value is skipped, never
+// fatal — a bad env var must not break the build.
+const resolveFirstPartyFingerprint = () => {
+  const raw = process.env.OPENCLAW_FIRST_PARTY_FINGERPRINT?.trim().toLowerCase();
+  if (!raw) {
+    return null;
+  }
+  if (!/^[0-9a-f]{32}$/.test(raw)) {
+    console.warn(
+      "[build-info] ignoring malformed OPENCLAW_FIRST_PARTY_FINGERPRINT (expected 32 hex chars)",
+    );
+    return null;
+  }
+  return raw;
+};
+
 const version = readPackageVersion();
 const commit = resolveCommit();
+const firstPartyFingerprint = resolveFirstPartyFingerprint();
 
 const buildInfo = {
   version,
   commit,
   builtAt: new Date().toISOString(),
+  ...(firstPartyFingerprint ? { firstPartyFingerprint } : {}),
 };
 
 fs.mkdirSync(distDir, { recursive: true });

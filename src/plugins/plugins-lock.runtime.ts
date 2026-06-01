@@ -6,6 +6,7 @@
 import crypto from "node:crypto";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { PLUGIN_SIGNATURE_SIDECAR_FILENAME } from "../security/plugin-signing.js";
 import {
   PLUGINS_LOCK_VERSION,
   PluginsLockHashMismatchError,
@@ -126,6 +127,22 @@ export async function hashPluginSourceTree(
     };
   }
   return entries;
+}
+
+/**
+ * Canonical SHA-256 over a plugin's source tree, excluding the signature
+ * sidecar (it is written AFTER hashing during signing, so including it would
+ * break verification). Single source of truth for the install-signing gate,
+ * the `plugins sign` CLI, and the bundled-plugin signer — build-time signing
+ * and install-time verification can never disagree on which bytes are covered.
+ *
+ * @stable
+ */
+export async function canonicalPluginHashHex(pluginRoot: string): Promise<string> {
+  const files = { ...(await hashPluginSourceTree(pluginRoot)) };
+  delete (files as Record<string, unknown>)[PLUGIN_SIGNATURE_SIDECAR_FILENAME];
+  const canonical = JSON.stringify(files);
+  return crypto.createHash("sha256").update(canonical, "utf8").digest("hex");
 }
 
 /**

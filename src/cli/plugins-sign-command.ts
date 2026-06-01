@@ -53,6 +53,7 @@ export type PluginsGenerateKeyCommandOptions = {
 export async function runPluginsSignCommand(opts: PluginsSignCommandOptions): Promise<void> {
   const pluginRoot = path.resolve(opts.pluginDir);
   const keyPath = path.resolve(opts.keyPath);
+  const { canonicalPluginHashHex } = await import("../plugins/plugins-lock.runtime.js");
   const pluginHash = await canonicalPluginHashHex(pluginRoot);
   const record = signPluginHash(pluginHash, keyPath);
   const sidecar: PluginSignatureSidecar = { ...record, plugin_hash: pluginHash };
@@ -133,16 +134,4 @@ export function runPluginsRevokeCommand(opts: PluginsRevokeCommandOptions): void
     return;
   }
   defaultRuntime.log(`Revoked publisher ${opts.fingerprint}\n  registry: ${filePath}`);
-}
-
-async function canonicalPluginHashHex(pluginRoot: string): Promise<string> {
-  // Reuse P0.5 canonicalization so signing + lockfile integrity commute. The
-  // sidecar itself is excluded from the hashed map because it gets written
-  // AFTER hashing during signing, but lives in the plugin root at verify time.
-  const { hashPluginSourceTree } = await import("../plugins/plugins-lock.runtime.js");
-  const files = { ...(await hashPluginSourceTree(pluginRoot)) };
-  delete (files as Record<string, unknown>)[PLUGIN_SIGNATURE_SIDECAR_FILENAME];
-  const canonical = JSON.stringify(files);
-  const crypto = await import("node:crypto");
-  return crypto.createHash("sha256").update(canonical, "utf8").digest("hex");
 }

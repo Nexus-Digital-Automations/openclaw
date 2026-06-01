@@ -22,10 +22,14 @@ import {
 } from "./capabilities.js";
 import {
   CapabilityDeniedError,
+  createHookRunner,
   passesCapabilityGateOrWarnForTests,
   resetCapabilityViolationsForTests,
   snapshotCapabilityViolationsForTests,
 } from "./hooks.js";
+import { addStaticTestHooks } from "./hooks.test-helpers.js";
+import { createEmptyPluginRegistry } from "./registry.js";
+import type { PluginHookBeforeToolCallResult, PluginHookToolContext } from "./types.js";
 
 const PLUGIN_ID = "plugin-under-test";
 
@@ -272,5 +276,55 @@ describe("DECLARED_PLUGIN_HOOK_NAMES — surface lock", () => {
       "cron_changed",
     ]);
     expect(new Set(DECLARED_PLUGIN_HOOK_NAMES)).toEqual(expected);
+  });
+});
+
+// Integration: prove the F.4 hard-block reaches the modifying-hook DISPATCH
+// loop, not just the gate function. before_tool_call is declared-surface and
+// dispatched via runModifyingHook, so an enforced plugin that violates its
+// declared surface must have its result dropped (handler skipped), while a
+// grandfathered one still merges (warn-only).
+describe("runModifyingHook dispatch — enforced hard-block", () => {
+  const stubToolCtx: PluginHookToolContext = {
+    toolName: "bash",
+    agentId: "main",
+    sessionKey: "agent:main:main",
+  };
+
+  function runBeforeToolCallFor(
+    pluginId: string,
+  ): Promise<PluginHookBeforeToolCallResult | undefined> {
+    const registry = createEmptyPluginRegistry();
+    addStaticTestHooks<PluginHookBeforeToolCallResult>(registry, {
+      hookName: "before_tool_call",
+      hooks: [{ pluginId, result: { block: true, blockReason: "blocked-by-handler" } }],
+    });
+    const runner = createHookRunner(registry, { logger: { warn: vi.fn(), debug: vi.fn() } });
+    return runner.runBeforeToolCall({ toolName: "bash", params: {} }, stubToolCtx);
+  }
+
+  it("drops an enforced plugin's undeclared modifying-hook result", async () => {
+    // Declares a DIFFERENT hook, so before_tool_call is a violation.
+    setPluginCapabilities("enforced-mod-plugin", { hooks: ["session_start"] });
+    setPluginCapabilityEnforcement("enforced-mod-plugin", "enforced");
+
+    const result = await runBeforeToolCallFor("enforced-mod-plugin");
+
+    expect(result?.block).toBeUndefined();
+    expect(
+      snapshotCapabilityViolationsForTests().get(
+        "enforced-mod-plugin::before_tool_call::runModifyingHook",
+      ),
+    ).toBe(1);
+  });
+
+  it("still merges a grandfathered plugin's undeclared modifying-hook result", async () => {
+    setPluginCapabilities("grandfathered-mod-plugin", { hooks: ["session_start"] });
+    setPluginCapabilityEnforcement("grandfathered-mod-plugin", "grandfathered");
+
+    const result = await runBeforeToolCallFor("grandfathered-mod-plugin");
+
+    expect(result?.block).toBe(true);
+    expect(result?.blockReason).toBe("blocked-by-handler");
   });
 });

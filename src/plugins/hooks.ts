@@ -261,8 +261,9 @@ export type PluginTargetedInboundClaimOutcome =
 // the capability gate by design: sync-write integration hooks
 // (tool_result_persist, before_message_write), gateway lifecycle hooks
 // (gateway_start/stop, deactivate), pure instrumentation
-// (heartbeat_prompt_contribution), and claim-style hooks dispatched
-// through runClaimingHook (the gate is wired only at runVoidHook today).
+// (heartbeat_prompt_contribution), and claim-style hook names. The gate now
+// runs at every dispatch seam (void / modifying / claiming); these names pass
+// because they are not declared-surface, not because of how they dispatch.
 const DECLARED_HOOK_NAMES: ReadonlySet<string> = DECLARED_PLUGIN_HOOK_NAMES;
 
 // Per-process counter for the warn-mode telemetry. Operators reading the
@@ -271,9 +272,10 @@ const DECLARED_HOOK_NAMES: ReadonlySet<string> = DECLARED_PLUGIN_HOOK_NAMES;
 const capabilityViolationCounters = new Map<string, number>();
 
 // C.3 part 2 — seam label so the warn-telemetry can answer "which dispatch
-// path observed this violation" once more dispatch surfaces opt in. Today
-// only runVoidHook calls the gate; the label still serves audit consumers
-// who want to slice violations by seam without parsing call stacks.
+// path observed this violation". The gate now runs at runVoidHook,
+// runModifyingHook, and the claiming seams (runClaimingHook /
+// runClaimingHookForPlugin); the label lets audit consumers slice violations
+// by seam without parsing call stacks.
 function recordCapabilityViolation(pluginId: string, hookName: string, seam: string): void {
   const key = `${pluginId}::${hookName}::${seam}`;
   capabilityViolationCounters.set(key, (capabilityViolationCounters.get(key) ?? 0) + 1);
@@ -753,6 +755,11 @@ export function createHookRunner(
     let result: TResult | undefined;
 
     for (const hook of hooks) {
+      if (
+        !passesCapabilityGateOrWarn(hook.pluginId, hookName, logger, { seam: "runModifyingHook" })
+      ) {
+        continue;
+      }
       try {
         const handler = hook.handler as (event: unknown, ctx: unknown) => Promise<TResult>;
         const promise = Promise.resolve(handler(event, ctx));
@@ -834,6 +841,11 @@ export function createHookRunner(
     ctx: Parameters<NonNullable<PluginHookRegistration<K>["handler"]>>[1],
   ): Promise<TResult | undefined> {
     for (const hook of hooks) {
+      if (
+        !passesCapabilityGateOrWarn(hook.pluginId, hookName, logger, { seam: "runClaimingHook" })
+      ) {
+        continue;
+      }
       try {
         const promise = Promise.resolve(
           (hook.handler as (event: unknown, ctx: unknown) => Promise<TResult | void>)(event, ctx),
@@ -885,6 +897,13 @@ export function createHookRunner(
 
     let firstError: string | null = null;
     for (const hook of hooks) {
+      if (
+        !passesCapabilityGateOrWarn(hook.pluginId, hookName, logger, {
+          seam: "runClaimingHookForPlugin",
+        })
+      ) {
+        continue;
+      }
       try {
         const promise = Promise.resolve(
           (hook.handler as (event: unknown, ctx: unknown) => Promise<TResult | void>)(event, ctx),

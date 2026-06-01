@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { Dirent } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import type { PluginPublisherPolicy } from "../config/types.plugins.js";
 import { packageNameMatchesId } from "../infra/install-safe-path.js";
 import {
   resolveNpmPackArchiveMetadata,
@@ -126,7 +127,9 @@ export type PluginInstallErrorCode =
   | "plugin.install.signature_invalid"
   | "plugin.install.unknown_publisher"
   | "plugin.install.signature_drift"
-  | "plugin.install.capabilities_malformed";
+  | "plugin.install.capabilities_malformed"
+  | "plugin.install.publisher_revoked"
+  | "plugin.install.publisher_policy";
 
 export type InstallPluginResult =
   | {
@@ -962,6 +965,10 @@ type PackageInstallCommonParams = InstallSafetyOverrides & {
   expectedPluginId?: string;
   requirePluginManifest?: boolean;
   installPolicyRequest?: PluginInstallPolicyRequest;
+  // T — workspace publisher policy + this plugin's per-entry requirePublisher,
+  // resolved from config by the caller and enforced by the signing gate.
+  publisherPolicy?: PluginPublisherPolicy;
+  requirePublisher?: string[];
 };
 
 type FileInstallCommonParams = Pick<
@@ -991,6 +998,8 @@ function pickPackageInstallCommonParams(
     expectedPluginId: params.expectedPluginId,
     requirePluginManifest: params.requirePluginManifest,
     installPolicyRequest: params.installPolicyRequest,
+    publisherPolicy: params.publisherPolicy,
+    requirePublisher: params.requirePublisher,
   };
 }
 
@@ -1644,6 +1653,8 @@ async function installPluginFromPackageDir(
       packageDir: params.packageDir,
       pluginId: plugin.pluginId,
       allowUnsigned,
+      ...(params.publisherPolicy ? { publisherPolicy: params.publisherPolicy } : {}),
+      ...(params.requirePublisher ? { requirePublisher: params.requirePublisher } : {}),
     });
     if (!signingResult.ok) {
       // Soft-rollout: when the env flag is off and the only failure is the

@@ -305,6 +305,22 @@ export function registerPluginsCli(program: Command) {
     });
 
   plugins
+    .command("revoke")
+    .description("Revoke a publisher fingerprint (refused at install even if first-party/trusted)")
+    .requiredOption("--fingerprint <fp>", "32-char hex fingerprint")
+    .option("--file <path>", "Override revoked-publishers.json path")
+    .option("--json", "Print JSON")
+    .action((opts: { fingerprint: string; file?: string; json?: boolean }) => {
+      void import("./plugins-sign-command.js").then(({ runPluginsRevokeCommand }) =>
+        runPluginsRevokeCommand({
+          fingerprint: opts.fingerprint,
+          ...(opts.file ? { filePath: opts.file } : {}),
+          json: opts.json,
+        }),
+      );
+    });
+
+  plugins
     .command("build")
     .description("Generate simple tool plugin metadata")
     .option("--root <path>", "Plugin package root")

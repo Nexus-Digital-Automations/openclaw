@@ -15,8 +15,10 @@ import { defaultRuntime } from "../runtime.js";
 import {
   PLUGIN_SIGNATURE_SIDECAR_FILENAME,
   addKnownPublisher,
+  addRevokedPublisher,
   generateSigningKeypair,
   resolveKnownPublishersPath,
+  resolveRevokedPublishersPath,
   signPluginHash,
   type PluginSignatureSidecar,
 } from "../security/plugin-signing.js";
@@ -106,6 +108,31 @@ export function runPluginsGenerateKeyCommand(opts: PluginsGenerateKeyCommandOpti
   defaultRuntime.log(
     `Generated Ed25519 keypair\n  private: ${result.privateKeyPath}\n  public:  ${result.publicKeyPath}\n  fingerprint: ${result.publisher.fingerprint}\n  publicKeyHex: ${result.publisher.publicKeyHex}`,
   );
+}
+
+export type PluginsRevokeCommandOptions = {
+  fingerprint: string;
+  filePath?: string;
+  json?: boolean;
+};
+
+/**
+ * Revoke a publisher fingerprint in the workspace revoked-publishers registry.
+ * A revoked fingerprint is refused at install even if it is first-party or in
+ * known-publishers. Idempotent.
+ *
+ * Failure modes: throws PluginSigningError on malformed fingerprint.
+ *
+ * @stable
+ */
+export function runPluginsRevokeCommand(opts: PluginsRevokeCommandOptions): void {
+  const filePath = opts.filePath ?? resolveRevokedPublishersPath();
+  addRevokedPublisher(opts.fingerprint, filePath);
+  if (opts.json) {
+    defaultRuntime.writeJson({ ok: true, fingerprint: opts.fingerprint, filePath });
+    return;
+  }
+  defaultRuntime.log(`Revoked publisher ${opts.fingerprint}\n  registry: ${filePath}`);
 }
 
 async function canonicalPluginHashHex(pluginRoot: string): Promise<string> {

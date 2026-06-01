@@ -35,7 +35,19 @@ export type PluginEntryConfig = {
     /** Explicitly allow this plugin to run completions against a non-default agent id. */
     allowAgentIdOverride?: boolean;
   };
+  /**
+   * Require this plugin to be signed by one of these publisher fingerprints at
+   * install. Empty/absent means no per-plugin publisher requirement.
+   */
+  requirePublisher?: string[];
   config?: Record<string, unknown>;
+};
+
+export type PluginPublisherPolicy = {
+  /** Plugin installs must be signed by one of these publisher fingerprints. */
+  requirePublisher?: string[];
+  /** Plugin installs signed by any of these publisher fingerprints are refused. */
+  denyPublisher?: string[];
 };
 
 export type PluginSlotsConfig = {
@@ -76,6 +88,8 @@ export type PluginsConfig = {
   bundledDiscovery?: "compat" | "allowlist";
   load?: PluginsLoadConfig;
   slots?: PluginSlotsConfig;
+  /** Workspace-wide publisher allow/deny policy enforced at plugin install. */
+  publisherPolicy?: PluginPublisherPolicy;
   entries?: Record<string, PluginEntryConfig>;
   /**
    * Internal transient carrier for plugin install records during command flows.

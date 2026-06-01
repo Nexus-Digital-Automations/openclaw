@@ -696,6 +696,26 @@ export function createHookRunner(
     return handler(event, ctx) as SyncHookResult<K> | PromiseLike<unknown>;
   };
 
+  // Run the capability gate for one handler at a dispatch seam. Returns true to
+  // proceed, false to skip. An "enforced" violation throws CapabilityDeniedError
+  // from the gate (C.6 hard-fail); we contain it here so a single offending
+  // plugin skips its own handler without aborting sibling handlers or the whole
+  // turn. The gate already recorded violation_blocked telemetry before throwing.
+  function handlerClearsCapabilityGate(
+    pluginId: string,
+    hookName: PluginHookName,
+    seam: string,
+  ): boolean {
+    try {
+      return passesCapabilityGateOrWarn(pluginId, hookName, logger, { seam });
+    } catch (err) {
+      if (err instanceof CapabilityDeniedError) {
+        return false;
+      }
+      throw err;
+    }
+  }
+
   /**
    * Run a hook that doesn't return a value (fire-and-forget style).
    * All handlers are executed in parallel for performance.
@@ -714,7 +734,7 @@ export function createHookRunner(
     logger?.debug?.(`[hooks] running ${hookName} (${hooks.length} handlers)`);
 
     const promises = hooks.map(async (hook) => {
-      if (!passesCapabilityGateOrWarn(hook.pluginId, hookName, logger, { seam: "runVoidHook" })) {
+      if (!handlerClearsCapabilityGate(hook.pluginId, hookName, "runVoidHook")) {
         return;
       }
       try {
@@ -755,9 +775,7 @@ export function createHookRunner(
     let result: TResult | undefined;
 
     for (const hook of hooks) {
-      if (
-        !passesCapabilityGateOrWarn(hook.pluginId, hookName, logger, { seam: "runModifyingHook" })
-      ) {
+      if (!handlerClearsCapabilityGate(hook.pluginId, hookName, "runModifyingHook")) {
         continue;
       }
       try {
@@ -841,9 +859,7 @@ export function createHookRunner(
     ctx: Parameters<NonNullable<PluginHookRegistration<K>["handler"]>>[1],
   ): Promise<TResult | undefined> {
     for (const hook of hooks) {
-      if (
-        !passesCapabilityGateOrWarn(hook.pluginId, hookName, logger, { seam: "runClaimingHook" })
-      ) {
+      if (!handlerClearsCapabilityGate(hook.pluginId, hookName, "runClaimingHook")) {
         continue;
       }
       try {
@@ -897,11 +913,7 @@ export function createHookRunner(
 
     let firstError: string | null = null;
     for (const hook of hooks) {
-      if (
-        !passesCapabilityGateOrWarn(hook.pluginId, hookName, logger, {
-          seam: "runClaimingHookForPlugin",
-        })
-      ) {
+      if (!handlerClearsCapabilityGate(hook.pluginId, hookName, "runClaimingHookForPlugin")) {
         continue;
       }
       try {

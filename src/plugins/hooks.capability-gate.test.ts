@@ -87,8 +87,9 @@ describe("passesCapabilityGateOrWarn — declared-hook match", () => {
     expect(snapshotCapabilityViolationsForTests().size).toBe(0);
   });
 
-  it("throws CapabilityDeniedError + emits warn + records counter when the hook is undeclared", () => {
+  it("throws CapabilityDeniedError + emits warn + records counter when an enforced plugin's hook is undeclared", () => {
     setPluginCapabilities(PLUGIN_ID, { hooks: ["before_prompt_build"] });
+    setPluginCapabilityEnforcement(PLUGIN_ID, "enforced");
     const warn = vi.fn();
     expect(() =>
       passesCapabilityGateOrWarnForTests(
@@ -100,7 +101,7 @@ describe("passesCapabilityGateOrWarn — declared-hook match", () => {
     ).toThrow(CapabilityDeniedError);
     expect(warn).toHaveBeenCalledTimes(1);
     const payload = JSON.parse(warn.mock.calls[0][0]);
-    expect(payload.event).toBe("plugin.capability.denied");
+    expect(payload.event).toBe("plugin.capability.violation_blocked");
     expect(payload.pluginId).toBe(PLUGIN_ID);
     expect(payload.hookName).toBe("before_tool_call");
     expect(payload.seam).toBe("runVoidHook");
@@ -111,6 +112,7 @@ describe("passesCapabilityGateOrWarn — declared-hook match", () => {
 describe("passesCapabilityGateOrWarn — per-seam telemetry", () => {
   it("composes the counter key from pluginId::hookName::seam (throw still records)", () => {
     setPluginCapabilities(PLUGIN_ID, { hooks: ["before_prompt_build"] });
+    setPluginCapabilityEnforcement(PLUGIN_ID, "enforced");
     const warn = vi.fn();
     expect(() =>
       passesCapabilityGateOrWarnForTests(
@@ -126,6 +128,7 @@ describe("passesCapabilityGateOrWarn — per-seam telemetry", () => {
 
   it("defaults the seam label to runVoidHook when omitted", () => {
     setPluginCapabilities(PLUGIN_ID, { hooks: ["before_prompt_build"] });
+    setPluginCapabilityEnforcement(PLUGIN_ID, "enforced");
     const warn = vi.fn();
     expect(() =>
       passesCapabilityGateOrWarnForTests(PLUGIN_ID, "before_tool_call", { warn }),
@@ -138,6 +141,7 @@ describe("passesCapabilityGateOrWarn — per-seam telemetry", () => {
 
   it("tracks distinct counter keys per seam for the same hook violation", () => {
     setPluginCapabilities(PLUGIN_ID, { hooks: ["before_prompt_build"] });
+    setPluginCapabilityEnforcement(PLUGIN_ID, "enforced");
     const warn = vi.fn();
     expect(() =>
       passesCapabilityGateOrWarnForTests(
@@ -162,17 +166,18 @@ describe("passesCapabilityGateOrWarn — per-seam telemetry", () => {
 });
 
 describe("passesCapabilityGateOrWarn — enforced mode (F.4 hard-block)", () => {
-  it("blocks an enforced plugin's undeclared hook: returns false, logs violation_blocked", () => {
+  it("blocks an enforced plugin's undeclared hook: throws CapabilityDeniedError, logs violation_blocked", () => {
     setPluginCapabilities(PLUGIN_ID, { hooks: ["before_prompt_build"] });
     setPluginCapabilityEnforcement(PLUGIN_ID, "enforced");
     const warn = vi.fn();
-    const allowed = passesCapabilityGateOrWarnForTests(
-      PLUGIN_ID,
-      "before_tool_call",
-      { warn },
-      { seam: "runVoidHook" },
-    );
-    expect(allowed).toBe(false);
+    expect(() =>
+      passesCapabilityGateOrWarnForTests(
+        PLUGIN_ID,
+        "before_tool_call",
+        { warn },
+        { seam: "runVoidHook" },
+      ),
+    ).toThrow(CapabilityDeniedError);
     const payload = JSON.parse(warn.mock.calls[0][0]);
     expect(payload.event).toBe("plugin.capability.violation_blocked");
     expect(payload.pluginId).toBe(PLUGIN_ID);
@@ -209,8 +214,9 @@ describe("passesCapabilityGateOrWarn — enforced mode (F.4 hard-block)", () => 
 });
 
 describe("passesCapabilityGateOrWarn — expanded behavior-hook surface", () => {
-  it("throws when a manifest excludes before_compaction (newly gated in C.3.c2)", () => {
+  it("throws when an enforced manifest excludes before_compaction (newly gated in C.3.c2)", () => {
     setPluginCapabilities(PLUGIN_ID, { hooks: ["before_prompt_build"] });
+    setPluginCapabilityEnforcement(PLUGIN_ID, "enforced");
     const warn = vi.fn();
     expect(() =>
       passesCapabilityGateOrWarnForTests(
@@ -226,8 +232,9 @@ describe("passesCapabilityGateOrWarn — expanded behavior-hook surface", () => 
     ).toBe(1);
   });
 
-  it("throws when a manifest excludes llm_input", () => {
+  it("throws when an enforced manifest excludes llm_input", () => {
     setPluginCapabilities(PLUGIN_ID, { hooks: ["session_start"] });
+    setPluginCapabilityEnforcement(PLUGIN_ID, "enforced");
     const warn = vi.fn();
     expect(() =>
       passesCapabilityGateOrWarnForTests(PLUGIN_ID, "llm_input", { warn }, { seam: "runVoidHook" }),
@@ -235,8 +242,9 @@ describe("passesCapabilityGateOrWarn — expanded behavior-hook surface", () => 
     expect(warn).toHaveBeenCalledTimes(1);
   });
 
-  it("throws when a manifest excludes message_sent", () => {
+  it("throws when an enforced manifest excludes message_sent", () => {
     setPluginCapabilities(PLUGIN_ID, { hooks: ["session_end"] });
+    setPluginCapabilityEnforcement(PLUGIN_ID, "enforced");
     const warn = vi.fn();
     expect(() =>
       passesCapabilityGateOrWarnForTests(

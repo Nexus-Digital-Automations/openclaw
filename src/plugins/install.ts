@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { Dirent } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { PluginPublisherPolicy } from "../config/types.plugins.js";
+import { getRuntimeConfig } from "../config/io.js";
 import { packageNameMatchesId } from "../infra/install-safe-path.js";
 import {
   resolveNpmPackArchiveMetadata,
@@ -965,10 +965,6 @@ type PackageInstallCommonParams = InstallSafetyOverrides & {
   expectedPluginId?: string;
   requirePluginManifest?: boolean;
   installPolicyRequest?: PluginInstallPolicyRequest;
-  // T — workspace publisher policy + this plugin's per-entry requirePublisher,
-  // resolved from config by the caller and enforced by the signing gate.
-  publisherPolicy?: PluginPublisherPolicy;
-  requirePublisher?: string[];
 };
 
 type FileInstallCommonParams = Pick<
@@ -998,8 +994,6 @@ function pickPackageInstallCommonParams(
     expectedPluginId: params.expectedPluginId,
     requirePluginManifest: params.requirePluginManifest,
     installPolicyRequest: params.installPolicyRequest,
-    publisherPolicy: params.publisherPolicy,
-    requirePublisher: params.requirePublisher,
   };
 }
 
@@ -1649,12 +1643,18 @@ async function installPluginFromPackageDir(
     params.allowUnsigned === true || params.dangerouslyForceUnsafeInstall === true;
   if (enforcementEnabled || !allowUnsigned) {
     const { enforcePluginInstallSignature } = await import("./install-signing-gate.js");
+    // T — resolve the publisher policy at this single install funnel so it
+    // applies uniformly to every install source (npm/clawhub/git/path/archive);
+    // wiring it per call site would leave bypass holes. pluginId is known here.
+    const pluginsCfg = getRuntimeConfig({ skipPluginValidation: true }).plugins;
+    const publisherPolicy = pluginsCfg?.publisherPolicy;
+    const requirePublisher = pluginsCfg?.entries?.[plugin.pluginId]?.requirePublisher;
     const signingResult = await enforcePluginInstallSignature({
       packageDir: params.packageDir,
       pluginId: plugin.pluginId,
       allowUnsigned,
-      ...(params.publisherPolicy ? { publisherPolicy: params.publisherPolicy } : {}),
-      ...(params.requirePublisher ? { requirePublisher: params.requirePublisher } : {}),
+      ...(publisherPolicy ? { publisherPolicy } : {}),
+      ...(requirePublisher ? { requirePublisher } : {}),
     });
     if (!signingResult.ok) {
       // Soft-rollout: when the env flag is off and the only failure is the

@@ -13,10 +13,12 @@ import crypto from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import type { PluginPublisherPolicy } from "../config/types.plugins.js";
 import {
   PLUGIN_SIGNATURE_SIDECAR_FILENAME,
   isPublisherTrusted,
   loadKnownPublishers,
+  loadRevokedPublishers,
   parsePluginSignatureSidecar,
   verifyPluginSignature,
 } from "../security/plugin-signing.js";
@@ -29,6 +31,8 @@ export const PLUGIN_INSTALL_SIGNING_ERROR_CODE = {
   UNKNOWN_PUBLISHER: "plugin.install.unknown_publisher",
   SIGNATURE_DRIFT: "plugin.install.signature_drift",
   CAPABILITIES_MALFORMED: "plugin.install.capabilities_malformed",
+  PUBLISHER_REVOKED: "plugin.install.publisher_revoked",
+  PUBLISHER_POLICY: "plugin.install.publisher_policy",
 } as const;
 
 export type PluginInstallSigningErrorCode =
@@ -53,6 +57,11 @@ export type PluginSigningGateOptions = {
   pluginId: string;
   allowUnsigned?: boolean;
   knownPublishersPath?: string;
+  revokedPublishersPath?: string;
+  // Workspace publisher allow/deny policy + this plugin's per-entry
+  // requirePublisher, evaluated after the publisher is otherwise trusted.
+  publisherPolicy?: PluginPublisherPolicy;
+  requirePublisher?: string[];
 };
 
 /**
@@ -97,12 +106,33 @@ export async function enforcePluginInstallSignature(
       reason: verifyResult.reason,
     };
   }
+  const fingerprint = sidecar.publisher.fingerprint;
+  const revoked = loadRevokedPublishers(opts.revokedPublishersPath);
+  if (revoked.includes(fingerprint)) {
+    return {
+      ok: false,
+      code: PLUGIN_INSTALL_SIGNING_ERROR_CODE.PUBLISHER_REVOKED,
+      reason: `publisher ${fingerprint} is revoked`,
+    };
+  }
   const known = loadKnownPublishers(opts.knownPublishersPath);
-  if (!isPublisherTrusted(sidecar.publisher.fingerprint, known)) {
+  if (!isPublisherTrusted(fingerprint, known, revoked)) {
     return {
       ok: false,
       code: PLUGIN_INSTALL_SIGNING_ERROR_CODE.UNKNOWN_PUBLISHER,
-      reason: `publisher ${sidecar.publisher.fingerprint} is not in known-publishers and is not first-party`,
+      reason: `publisher ${fingerprint} is not in known-publishers and is not first-party`,
+    };
+  }
+  const policyVerdict = checkPublisherPolicy({
+    fingerprint,
+    policy: opts.publisherPolicy,
+    requirePublisher: opts.requirePublisher,
+  });
+  if (!policyVerdict.ok) {
+    return {
+      ok: false,
+      code: PLUGIN_INSTALL_SIGNING_ERROR_CODE.PUBLISHER_POLICY,
+      reason: policyVerdict.reason,
     };
   }
   const capabilitiesResult = loadPluginCapabilitiesFromDir(opts.packageDir);
@@ -118,6 +148,28 @@ export async function enforcePluginInstallSignature(
     publisherFingerprint: sidecar.publisher.fingerprint,
     ...(capabilitiesResult.capabilities ? { capabilities: capabilitiesResult.capabilities } : {}),
   };
+}
+
+function checkPublisherPolicy(params: {
+  fingerprint: string;
+  policy?: PluginPublisherPolicy;
+  requirePublisher?: string[];
+}): { ok: true } | { ok: false; reason: string } {
+  const { fingerprint, policy, requirePublisher } = params;
+  if (policy?.denyPublisher?.includes(fingerprint)) {
+    return {
+      ok: false,
+      reason: `publisher ${fingerprint} is denied by workspace publisher policy`,
+    };
+  }
+  const required = [...(policy?.requirePublisher ?? []), ...(requirePublisher ?? [])];
+  if (required.length > 0 && !required.includes(fingerprint)) {
+    return {
+      ok: false,
+      reason: `publisher ${fingerprint} is not in the required-publisher allowlist`,
+    };
+  }
+  return { ok: true };
 }
 
 async function canonicalPluginHashHex(pluginRoot: string): Promise<string> {

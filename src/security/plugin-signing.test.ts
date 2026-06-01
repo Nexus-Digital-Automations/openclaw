@@ -10,10 +10,12 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   addKnownPublisher,
+  addRevokedPublisher,
   fingerprintForPublicKey,
   generateSigningKeypair,
   isPublisherTrusted,
   loadKnownPublishers,
+  loadRevokedPublishers,
   PluginSigningError,
   resolveKnownPublishersPath,
   signPluginHash,
@@ -34,6 +36,35 @@ afterEach(async () => {
 function freshHash(): string {
   return crypto.createHash("sha256").update(crypto.randomBytes(32)).digest("hex");
 }
+
+describe("isPublisherTrusted — revocation precedence", () => {
+  it("refuses a revoked fingerprint even when it is first-party", () => {
+    expect(
+      isPublisherTrusted(
+        FIRST_PARTY_PUBLISHER_FINGERPRINT,
+        [],
+        [FIRST_PARTY_PUBLISHER_FINGERPRINT],
+      ),
+    ).toBe(false);
+  });
+
+  it("refuses a revoked fingerprint even when it is in known-publishers", () => {
+    const known = [{ fingerprint: "a".repeat(32), publicKeyHex: "ab" }];
+    expect(isPublisherTrusted("a".repeat(32), known, ["a".repeat(32)])).toBe(false);
+  });
+
+  it("still trusts a known publisher that is not revoked", () => {
+    const known = [{ fingerprint: "a".repeat(32), publicKeyHex: "ab" }];
+    expect(isPublisherTrusted("a".repeat(32), known, ["b".repeat(32)])).toBe(true);
+  });
+
+  it("round-trips addRevokedPublisher -> loadRevokedPublishers and is idempotent", () => {
+    const filePath = path.join(workspaceDir, "revoked-publishers.json");
+    addRevokedPublisher("c".repeat(32), filePath);
+    addRevokedPublisher("c".repeat(32), filePath);
+    expect(loadRevokedPublishers(filePath)).toEqual(["c".repeat(32)]);
+  });
+});
 
 describe("sign + verify roundtrip", () => {
   it("verifies a signature produced by the matching private key", async () => {
@@ -104,7 +135,7 @@ describe("sign-time validation", () => {
   it("refuses an RSA private key", async () => {
     const { privateKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
     const rsaPath = path.join(workspaceDir, "rsa-private.pem");
-    await writeFile(rsaPath, privateKey.export({ format: "pem", type: "pkcs8" }) as string);
+    await writeFile(rsaPath, privateKey.export({ format: "pem", type: "pkcs8" }));
     expect(() => signPluginHash(freshHash(), rsaPath)).toThrow(PluginSigningError);
   });
 });

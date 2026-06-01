@@ -22,12 +22,16 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { resolveRequiredHomeDir } from "../infra/home-dir.js";
 
-// First-party (OpenClaw maintainer) publisher fingerprint. Operators that build
-// from source replace this with their own offline-rooted maintainer key.
-// TODO: P3.3 sigstore replaces this hardcoded constant with transparency-log
-// verification.
-export const FIRST_PARTY_PUBLISHER_FINGERPRINT =
+// First-party (OpenClaw maintainer) publisher fingerprint, injected at build
+// via OPENCLAW_FIRST_PARTY_FINGERPRINT (release builds set it; mirrors the
+// OPENCLAW_BUNDLED_VERSION pattern in version.ts). Source / unconfigured builds
+// fall back to the all-zeros placeholder, which matches no real Ed25519
+// fingerprint — so they trust only explicitly `plugins trust`-ed publishers,
+// never an accidental key. TODO: P3.3 sigstore transparency log supersedes this.
+const FIRST_PARTY_FINGERPRINT_PLACEHOLDER =
   "0000000000000000000000000000000000000000000000000000000000000000".slice(0, 32);
+export const FIRST_PARTY_PUBLISHER_FINGERPRINT =
+  process.env.OPENCLAW_FIRST_PARTY_FINGERPRINT?.trim() || FIRST_PARTY_FINGERPRINT_PLACEHOLDER;
 
 const FINGERPRINT_HEX_LENGTH = 32;
 
@@ -281,15 +285,95 @@ function loadKnownPublishersAsFile(filePath: string): KnownPublishersFile {
 }
 
 /**
- * Check whether a publisher is trusted: either an entry in the workspace
- * known-publishers registry or the hardcoded first-party fingerprint.
+ * Resolve the default revoked-publishers registry path under the resolved home.
+ *
+ * @stable
+ */
+export function resolveRevokedPublishersPath(env: NodeJS.ProcessEnv = process.env): string {
+  return path.join(resolveRequiredHomeDir(env), ".openclaw", "revoked-publishers.json");
+}
+
+type RevokedPublishersFile = {
+  version: 1;
+  revoked: string[];
+};
+
+function isRevokedPublishersFile(value: unknown): value is RevokedPublishersFile {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const candidate = value as { version?: unknown; revoked?: unknown };
+  if (candidate.version !== 1 || !Array.isArray(candidate.revoked)) {
+    return false;
+  }
+  return candidate.revoked.every((entry) => typeof entry === "string");
+}
+
+/**
+ * Load the operator-managed list of revoked publisher fingerprints. Empty when
+ * absent; throws on malformed JSON so a corrupted file never silently
+ * re-trusts a revoked key.
+ *
+ * @stable
+ */
+export function loadRevokedPublishers(filePath?: string): string[] {
+  const target = filePath ?? resolveRevokedPublishersPath();
+  if (!existsSync(target)) {
+    return [];
+  }
+  const raw = readFileSync(target, "utf8");
+  const parsed = JSON.parse(raw) as unknown;
+  if (!isRevokedPublishersFile(parsed)) {
+    throw new PluginSigningError(
+      "plugin.signing.revoked_publishers_invalid",
+      `revoked-publishers.json at ${target} is malformed`,
+    );
+  }
+  return [...parsed.revoked];
+}
+
+/**
+ * Revoke a publisher fingerprint. Idempotent. A revoked fingerprint is refused
+ * by `isPublisherTrusted` even if it is also first-party or known-trusted.
+ *
+ * @stable
+ */
+export function addRevokedPublisher(fingerprint: string, filePath?: string): void {
+  if (fingerprint.length !== FINGERPRINT_HEX_LENGTH || !/^[a-f0-9]+$/u.test(fingerprint)) {
+    throw new PluginSigningError(
+      "plugin.signing.fingerprint_invalid",
+      `fingerprint must be ${FINGERPRINT_HEX_LENGTH} lowercase hex chars`,
+    );
+  }
+  const target = filePath ?? resolveRevokedPublishersPath();
+  const revoked = existsSync(target) ? loadRevokedPublishers(target) : [];
+  if (revoked.includes(fingerprint)) {
+    return;
+  }
+  const next: RevokedPublishersFile = {
+    version: 1,
+    revoked: [...revoked, fingerprint].toSorted((a, b) => a.localeCompare(b)),
+  };
+  mkdirSync(path.dirname(target), { recursive: true });
+  writeFileSync(target, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+}
+
+/**
+ * Check whether a publisher is trusted. Revoke-first: a revoked fingerprint is
+ * never trusted, even if it is first-party or in the known-publishers registry.
+ * Otherwise trusted when it matches the first-party fingerprint or a workspace
+ * known-publishers entry.
  *
  * @stable
  */
 export function isPublisherTrusted(
   fingerprint: string,
   knownPublishers: readonly PublisherIdentity[],
+  revokedFingerprints: readonly string[] = [],
 ): boolean {
+  if (revokedFingerprints.includes(fingerprint)) {
+    return false;
+  }
   if (fingerprint === FIRST_PARTY_PUBLISHER_FINGERPRINT) {
     return true;
   }

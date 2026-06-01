@@ -12,6 +12,7 @@ import {
   generateSigningKeypair,
   PLUGIN_SIGNATURE_SIDECAR_FILENAME,
   addKnownPublisher,
+  addRevokedPublisher,
 } from "../security/plugin-signing.js";
 import {
   enforcePluginInstallSignature,
@@ -21,11 +22,13 @@ import {
 let workspaceDir = "";
 let pluginDir = "";
 let knownPublishersPath = "";
+let revokedPublishersPath = "";
 
 beforeEach(async () => {
   workspaceDir = await mkdtemp(path.join(os.tmpdir(), "openclaw-install-signing-"));
   pluginDir = path.join(workspaceDir, "plugin-src");
   knownPublishersPath = path.join(workspaceDir, "known-publishers.json");
+  revokedPublishersPath = path.join(workspaceDir, "revoked-publishers.json");
   mkdirSync(pluginDir, { recursive: true });
   writeFileSync(
     path.join(pluginDir, "openclaw.plugin.json"),
@@ -141,6 +144,66 @@ describe("enforcePluginInstallSignature", () => {
     if (!result.ok) {
       expect(result.code).toBe(PLUGIN_INSTALL_SIGNING_ERROR_CODE.SIGNATURE_INVALID);
     }
+  });
+});
+
+describe("enforcePluginInstallSignature — revocation + publisher policy", () => {
+  it("refuses a revoked publisher even when it is trusted (revoke-first)", async () => {
+    const publisher = await signFixturePluginWithFreshKey();
+    addKnownPublisher(publisher.fingerprint, publisher.publicKeyHex, knownPublishersPath);
+    addRevokedPublisher(publisher.fingerprint, revokedPublishersPath);
+    const result = await enforcePluginInstallSignature({
+      packageDir: pluginDir,
+      pluginId: "demo",
+      knownPublishersPath,
+      revokedPublishersPath,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe(PLUGIN_INSTALL_SIGNING_ERROR_CODE.PUBLISHER_REVOKED);
+    }
+  });
+
+  it("refuses a publisher denied by workspace policy", async () => {
+    const publisher = await signFixturePluginWithFreshKey();
+    addKnownPublisher(publisher.fingerprint, publisher.publicKeyHex, knownPublishersPath);
+    const result = await enforcePluginInstallSignature({
+      packageDir: pluginDir,
+      pluginId: "demo",
+      knownPublishersPath,
+      publisherPolicy: { denyPublisher: [publisher.fingerprint] },
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe(PLUGIN_INSTALL_SIGNING_ERROR_CODE.PUBLISHER_POLICY);
+    }
+  });
+
+  it("refuses a publisher outside the requirePublisher allowlist", async () => {
+    const publisher = await signFixturePluginWithFreshKey();
+    addKnownPublisher(publisher.fingerprint, publisher.publicKeyHex, knownPublishersPath);
+    const result = await enforcePluginInstallSignature({
+      packageDir: pluginDir,
+      pluginId: "demo",
+      knownPublishersPath,
+      requirePublisher: ["a".repeat(32)],
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe(PLUGIN_INSTALL_SIGNING_ERROR_CODE.PUBLISHER_POLICY);
+    }
+  });
+
+  it("admits a publisher inside the requirePublisher allowlist", async () => {
+    const publisher = await signFixturePluginWithFreshKey();
+    addKnownPublisher(publisher.fingerprint, publisher.publicKeyHex, knownPublishersPath);
+    const result = await enforcePluginInstallSignature({
+      packageDir: pluginDir,
+      pluginId: "demo",
+      knownPublishersPath,
+      requirePublisher: [publisher.fingerprint],
+    });
+    expect(result.ok).toBe(true);
   });
 });
 

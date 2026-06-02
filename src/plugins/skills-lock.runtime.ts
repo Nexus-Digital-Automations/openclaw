@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { isContainedRelativePath } from "./lock-path-safety.js";
 import {
   SKILLS_LOCK_VERSION,
   SkillsLockHashMismatchError,
@@ -173,18 +174,6 @@ function assertSkillsLockShape(value: unknown, lockPath: string): SkillsLock {
     }
   }
   return candidate as SkillsLock;
-}
-
-// A lock key is safe only if it stays inside the plugin root: not absolute, no
-// `\` (a path separator on Windows that could escape), no NUL, and its POSIX
-// normalization neither is nor begins with `..`. Keys are written POSIX-style by
-// writeSkillsLock, so a normalized form starting with `../` means traversal.
-function isContainedRelativePath(key: string): boolean {
-  if (!key || key.includes("\0") || key.includes("\\") || path.posix.isAbsolute(key)) {
-    return false;
-  }
-  const normalized = path.posix.normalize(key);
-  return normalized !== "." && normalized !== ".." && !normalized.startsWith("../");
 }
 
 class SkillsLockVersionError extends Error {

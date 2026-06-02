@@ -109,6 +109,19 @@ export class PluginsLockUnexpectedFileError extends PluginsLockVerificationError
   }
 }
 
+export class PluginsLockUnsafePathError extends PluginsLockVerificationError {
+  readonly pluginId: string;
+  readonly relativePath: string;
+  constructor(pluginId: string, relativePath: string) {
+    super(
+      `plugins.lock entry "${relativePath}" for plugin "${pluginId}" is not a contained relative path; the lockfile may be corrupt or tampered`,
+    );
+    this.name = "PluginsLockUnsafePathError";
+    this.pluginId = pluginId;
+    this.relativePath = relativePath;
+  }
+}
+
 export class PluginsLockHashMismatchError extends PluginsLockVerificationError {
   readonly pluginId: string;
   readonly relativePath: string;

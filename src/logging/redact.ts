@@ -459,6 +459,13 @@ function redactStructuredSecretValue(
     return value;
   }
   if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
+    // A numeric/bool/bigint value at a sensitive key (e.g. a numeric card number
+    // or cvv) would otherwise bypass the field masking its string form gets, so
+    // type coercion defeats redaction. Coerce + redact at sensitive keys only,
+    // mirroring session-tool-result-guard.ts.
+    if (isSensitiveFieldKey(key)) {
+      return redactSensitiveFieldValueWithOptions(key, String(value), options);
+    }
     return value;
   }
   if (Array.isArray(value)) {

@@ -2,6 +2,7 @@ import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { readLoggingConfig } from "../logging/config.js";
 import {
   getDefaultRedactPatterns,
+  isSensitiveFieldKey,
   redactSensitiveFieldValue,
   redactSensitiveText,
 } from "../logging/redact.js";
@@ -60,6 +61,15 @@ function redactTranscriptStructuredValue(
       return redactTranscriptStructuredFieldValue(fieldKey, value, cfg);
     }
     return redactTranscriptText(value, cfg);
+  }
+  // A numeric/bool/bigint value at a sensitive key bypasses the field masking
+  // its string form gets; coerce + redact so type coercion can't defeat it.
+  if (
+    fieldKey &&
+    (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") &&
+    isSensitiveFieldKey(fieldKey)
+  ) {
+    return redactTranscriptStructuredFieldValue(fieldKey, String(value), cfg);
   }
   if (Array.isArray(value)) {
     if (seen.has(value)) {

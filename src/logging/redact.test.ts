@@ -635,6 +635,19 @@ describe("redactSecrets", () => {
     expect(serialized).toContain("main-test-case-name");
   });
 
+  it("masks numeric/bigint secrets at sensitive keys (type coercion bypass)", () => {
+    const output = redactSecrets({
+      cardNumber: 4_242_424_242_424_242,
+      cvv: 123,
+      securityCode: 4567n,
+      itemCount: 5, // not a sensitive key — must stay a number
+    }) as Record<string, unknown>;
+    expect(String(output.cardNumber)).not.toContain("4242424242424242");
+    expect(String(output.cvv)).not.toContain("123");
+    expect(String(output.securityCode)).not.toContain("4567");
+    expect(output.itemCount).toBe(5);
+  });
+
   it("preserves benign bare access and refresh fields", () => {
     const output = redactSecrets({
       permissions: {

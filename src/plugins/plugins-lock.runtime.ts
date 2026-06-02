@@ -7,6 +7,7 @@ import crypto from "node:crypto";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { PLUGIN_SIGNATURE_SIDECAR_FILENAME } from "../security/plugin-signing.js";
+import { isContainedRelativePath } from "./lock-path-safety.js";
 import {
   PLUGINS_LOCK_VERSION,
   PluginsLockHashMismatchError,
@@ -14,6 +15,7 @@ import {
   PluginsLockMissingFileError,
   PluginsLockUnexpectedFileError,
   PluginsLockUnknownPluginError,
+  PluginsLockUnsafePathError,
   type PluginsLock,
   type PluginsLockEntry,
   type PluginsLockPlugin,
@@ -202,6 +204,25 @@ function assertPluginsLockShape(value: unknown, lockPath: string): PluginsLock {
   }
   if (!Array.isArray(candidate.plugins)) {
     throw new PluginsLockMissingError(lockPath);
+  }
+  // The lockfile is untrusted on read; its file keys are later path.join'd
+  // against the plugin root and stat/hashed (verifyPluginSourceAgainstLock), so
+  // an escaping key would become an arbitrary out-of-tree read. Reject the whole
+  // lock at this single parse boundary — mirrors skills-lock via the shared
+  // isContainedRelativePath guard so the two parsers cannot drift apart.
+  for (const plugin of candidate.plugins) {
+    const files = (plugin as Partial<PluginsLockPlugin>).files;
+    if (!files || typeof files !== "object") {
+      continue;
+    }
+    for (const key of Object.keys(files)) {
+      if (!isContainedRelativePath(key)) {
+        throw new PluginsLockUnsafePathError(
+          (plugin as Partial<PluginsLockPlugin>).pluginId ?? "(unknown)",
+          key,
+        );
+      }
+    }
   }
   return candidate as PluginsLock;
 }

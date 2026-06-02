@@ -9,6 +9,7 @@ import {
   isInstallApprovalEnabled,
   PLUGIN_INSTALL_APPROVAL_CODE,
 } from "./install-approval.js";
+import type { PluginApprovalResolver } from "./install-approval.types.js";
 
 const HASH = "a".repeat(64);
 const OTHER_HASH = "b".repeat(64);
@@ -63,16 +64,16 @@ describe("applyInstallApprovalGate decision table", () => {
   });
 
   it("re-prompts on a changed hash and flags isUpgrade + previousApprovedHash", async () => {
-    const resolver = vi.fn(async () => ({ kind: "approved" as const }));
+    const resolver = vi.fn<PluginApprovalResolver>(async () => ({ kind: "approved" }));
     const result = await applyInstallApprovalGate(
       baseParams({ loadPriorApprovedHash: async () => OTHER_HASH, approvalResolver: resolver }),
     );
     expect(result.ok).toBe(true);
     expect(resolver).toHaveBeenCalledTimes(1);
-    const context = resolver.mock.calls[0][0];
-    expect(context.isUpgrade).toBe(true);
-    expect(context.previousApprovedHash).toBe(OTHER_HASH);
-    expect(context.trust).toBe("trusted-publisher");
+    const context = resolver.mock.calls[0]?.[0];
+    expect(context?.isUpgrade).toBe(true);
+    expect(context?.previousApprovedHash).toBe(OTHER_HASH);
+    expect(context?.trust).toBe("trusted-publisher");
   });
 
   it("refuses with approval_denied when the resolver denies", async () => {
@@ -93,12 +94,12 @@ describe("applyInstallApprovalGate decision table", () => {
   });
 
   it("marks an unsigned install (no publisher) as unsigned-allowed trust", async () => {
-    const resolver = vi.fn(async () => ({ kind: "approved" as const }));
+    const resolver = vi.fn<PluginApprovalResolver>(async () => ({ kind: "approved" }));
     const result = await applyInstallApprovalGate(
       baseParams({ publisherFingerprint: undefined, approvalResolver: resolver }),
     );
     expect(result.ok).toBe(true);
-    expect(resolver.mock.calls[0][0].trust).toBe("unsigned-allowed");
+    expect(resolver.mock.calls[0]?.[0]?.trust).toBe("unsigned-allowed");
     if (result.ok) {
       expect(result.approval?.approvedPublisherFingerprint).toBeUndefined();
     }

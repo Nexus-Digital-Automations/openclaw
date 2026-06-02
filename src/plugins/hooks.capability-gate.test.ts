@@ -307,7 +307,9 @@ describe("runModifyingHook dispatch — enforced hard-block", () => {
       hookName: "before_tool_call",
       hooks: [{ pluginId, result: { block: true, blockReason: "blocked-by-handler" } }],
     });
-    const runner = createHookRunner(registry, { logger: { warn: vi.fn(), debug: vi.fn() } });
+    const runner = createHookRunner(registry, {
+      logger: { warn: vi.fn(), debug: vi.fn(), error: vi.fn() },
+    });
     return runner.runBeforeToolCall({ toolName: "bash", params: {} }, stubToolCtx);
   }
 

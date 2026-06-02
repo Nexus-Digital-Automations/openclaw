@@ -32,7 +32,7 @@ import {
   clearPriorRunCorrelationIdsForTests,
   getPriorRunCorrelationId,
   setPriorRunCorrelationId,
-} from "../agents/pi-embedded-runner/run-state.js";
+} from "../agents/embedded-agent-runner/run-state.js";
 import {
   clearExternalContentBodiesForTests,
   didCorrelationTouchExternalContent,

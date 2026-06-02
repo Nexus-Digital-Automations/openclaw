@@ -16,8 +16,9 @@ vi.mock("../../secrets/target-registry.js", () => ({
   isKnownSecretTargetId: () => true,
 }));
 
-vi.mock("../protocol/index.js", async (importOriginal) => {
-  const original = await importOriginal<typeof import("../protocol/index.js")>();
+vi.mock("../../../packages/gateway-protocol/src/index.js", async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import("../../../packages/gateway-protocol/src/index.js")>();
   return {
     ...original,
     validateSecretsResolveParams: Object.assign(() => true, { errors: null }),

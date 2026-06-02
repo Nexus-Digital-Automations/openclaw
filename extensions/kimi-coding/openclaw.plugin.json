@@ -4,7 +4,10 @@
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["kimi", "kimi-coding"],
+  "providers": [
+    "kimi",
+    "kimi-coding"
+  ],
   "providerRequest": {
     "providers": {
       "kimi": {
@@ -41,11 +44,17 @@
     "providers": [
       {
         "id": "kimi",
-        "envVars": ["KIMI_API_KEY", "KIMICODE_API_KEY"]
+        "envVars": [
+          "KIMI_API_KEY",
+          "KIMICODE_API_KEY"
+        ]
       },
       {
         "id": "kimi-coding",
-        "envVars": ["KIMI_API_KEY", "KIMICODE_API_KEY"]
+        "envVars": [
+          "KIMI_API_KEY",
+          "KIMICODE_API_KEY"
+        ]
       }
     ]
   },
@@ -68,5 +77,12 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {}
+  },
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "kimi",
+      "kimi-coding"
+    ]
   }
 }

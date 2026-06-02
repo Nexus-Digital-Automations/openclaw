@@ -1197,6 +1197,39 @@ export async function runMemoryIndex(opts: MemoryCommandOptions) {
   }
 }
 
+export async function runMemoryReclassify(opts: MemoryCommandOptions) {
+  setVerbose(Boolean(opts.verbose));
+  const { config: cfg, diagnostics } = await loadMemoryCommandConfig("memory reclassify");
+  emitMemorySecretResolveDiagnostics(diagnostics, { json: Boolean(opts.json) });
+  const agentIds = resolveAgentIds(cfg, opts.agent);
+  const perAgentResults: Array<{ agentId: string; total: number; updated: number }> = [];
+  for (const agentId of agentIds) {
+    await withMemoryManagerForAgent({
+      cfg,
+      agentId,
+      purpose: "cli",
+      run: async (manager) => {
+        if (!manager.reclassify) {
+          defaultRuntime.log(
+            `Memory backend (${agentId}) does not support reclassification — skipping.`,
+          );
+          return;
+        }
+        const result = await manager.reclassify();
+        perAgentResults.push({ agentId, total: result.total, updated: result.updated });
+        if (!opts.json) {
+          defaultRuntime.log(
+            `Memory reclassify (${agentId}): ${result.updated} of ${result.total} chunks updated.`,
+          );
+        }
+      },
+    });
+  }
+  if (opts.json) {
+    defaultRuntime.log(JSON.stringify({ agents: perAgentResults }, null, 2));
+  }
+}
+
 export async function runMemorySearch(
   queryArg: string | undefined,
   opts: MemorySearchCommandOptions,

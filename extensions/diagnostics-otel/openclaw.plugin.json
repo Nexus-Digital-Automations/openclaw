@@ -9,5 +9,8 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {}
+  },
+  "capabilities": {
+    "hooks": []
   }
 }

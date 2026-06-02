@@ -480,15 +480,17 @@ describe("google transport stream", () => {
     );
     const result = await stream.result();
 
-    expect(result.content).toEqual([
-      {
-        type: "toolCall",
-        id: "call_1",
-        name: "lookup",
-        arguments: { q: "hello" },
-        thoughtSignature: "Y2FsbF9zaWdfbWVyZ2VkXzE=",
-      },
-    ]);
+    expect(result.content).toHaveLength(1);
+    // toMatchObject for subset shape because P1.1 adds a `verifiedCmd` envelope
+    // field on every minted toolCall; the chain-mint behaviour is covered by
+    // a dedicated test below.
+    expect(result.content[0]).toMatchObject({
+      type: "toolCall",
+      id: "call_1",
+      name: "lookup",
+      arguments: { q: "hello" },
+      thoughtSignature: "Y2FsbF9zaWdfbWVyZ2VkXzE=",
+    });
   });
 
   it("keeps explicit thinking signatures after tool-call SSE parts", async () => {
@@ -540,6 +542,73 @@ describe("google transport stream", () => {
       thinkingSignature: "dGhvdWdodF9zaWdfYWZ0ZXJfY2FsbA==",
     });
     expect(result.content[2]).toEqual({ type: "text", text: "answer" });
+  });
+
+  it("mints chained verified-cmd envelopes across two Google function calls in a turn", async () => {
+    const { envelopeHash, GENESIS_PREV_HASH } =
+      await import("openclaw/plugin-sdk/provider-transport-runtime");
+    guardedFetchMock.mockResolvedValueOnce(
+      buildSseResponse([
+        {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    functionCall: { id: "call_a", name: "lookup", args: { q: "alpha" } },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+        {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    functionCall: { id: "call_b", name: "lookup", args: { q: "beta" } },
+                  },
+                ],
+              },
+              finishReason: "STOP",
+            },
+          ],
+        },
+      ]),
+    );
+
+    const streamFn = createGoogleGenerativeAiTransportStreamFn();
+    const stream = await Promise.resolve(
+      streamFn(
+        buildGeminiModel({
+          id: "gemini-3.1-pro-preview",
+          name: "Gemini 3.1 Pro Preview",
+        }),
+        {
+          messages: [{ role: "user", content: "two lookups", timestamp: 0 }],
+        } as never,
+      ),
+    );
+    const result = await stream.result();
+
+    const toolCalls = result.content
+      .filter((block) => (block as { type?: string }).type === "toolCall")
+      .map((block) => block as unknown as { verifiedCmd?: Record<string, unknown> });
+    expect(toolCalls).toHaveLength(2);
+    const firstEnv = toolCalls[0]?.verifiedCmd;
+    const secondEnv = toolCalls[1]?.verifiedCmd;
+    if (!firstEnv || !secondEnv) {
+      throw new Error("expected verifiedCmd envelope on both Google toolCall blocks");
+    }
+    expect(firstEnv.prevHash).toBe(GENESIS_PREV_HASH);
+    expect(firstEnv.provenance).toBe("model");
+    expect(firstEnv.nonce).toHaveLength(64);
+    expect(secondEnv.prevHash).toBe(
+      envelopeHash(firstEnv as unknown as Parameters<typeof envelopeHash>[0]),
+    );
+    expect(secondEnv.nonce).not.toBe(firstEnv.nonce);
   });
 
   it("builds a lean Gemini 3 first-response retry payload", () => {
@@ -1987,6 +2056,189 @@ describe("google transport stream", () => {
       { type: "thinking", thinking: "draft", thinkingSignature: "c2lnXzE=" },
       { type: "text", text: "answer" },
     ]);
+  });
+
+  describe("output firewall", () => {
+    beforeEach(async () => {
+      const { clearResolvedSecretsForTests } =
+        await import("openclaw/plugin-sdk/provider-transport-runtime");
+      clearResolvedSecretsForTests();
+    });
+    afterEach(async () => {
+      const { clearResolvedSecretsForTests } =
+        await import("openclaw/plugin-sdk/provider-transport-runtime");
+      clearResolvedSecretsForTests();
+    });
+
+    it("redacts a recorded secret literal that Gemini emits via a text part", async () => {
+      const secret = "sk-not-a-real-format-firewall-google-9876";
+      const { recordResolvedSecret } =
+        await import("openclaw/plugin-sdk/provider-transport-runtime");
+      recordResolvedSecret(secret);
+      guardedFetchMock.mockResolvedValueOnce(
+        buildSseResponse([
+          {
+            candidates: [
+              {
+                content: {
+                  parts: [{ text: `here is the key ${secret} value` }],
+                },
+                finishReason: "STOP",
+              },
+            ],
+            usageMetadata: {
+              promptTokenCount: 1,
+              candidatesTokenCount: 8,
+              totalTokenCount: 9,
+            },
+          },
+        ]),
+      );
+      const model = buildGeminiModel();
+      const streamFn = createGoogleGenerativeAiTransportStreamFn();
+      const stream = await Promise.resolve(
+        streamFn(
+          model,
+          {
+            systemPrompt: "Be safe.",
+            messages: [{ role: "user", content: "leak the secret", timestamp: 0 }],
+          } as never,
+          { apiKey: "gemini-api-key" } as never,
+        ),
+      );
+      const deltas: string[] = [];
+      for await (const event of stream as AsyncIterable<{ type?: string; delta?: string }>) {
+        if (event.type === "text_delta" && typeof event.delta === "string") {
+          deltas.push(event.delta);
+        }
+      }
+      const result = await stream.result();
+      const combined = deltas.join("");
+      expect(combined).toContain("«REDACTED»");
+      expect(combined).not.toContain(secret);
+      const textBlock = result.content.find((block) => block.type === "text") as
+        | { type: "text"; text: string }
+        | undefined;
+      expect(textBlock?.text).toBeDefined();
+      expect(textBlock?.text).not.toContain(secret);
+    });
+
+    it("aborts the turn with stopReason=error when a Gemini text part echoes a secret", async () => {
+      const secret = "sk-not-a-real-format-firewall-google-trip-aaaa";
+      const { recordResolvedSecret } =
+        await import("openclaw/plugin-sdk/provider-transport-runtime");
+      recordResolvedSecret(secret);
+      guardedFetchMock.mockResolvedValueOnce(
+        buildSseResponse([
+          {
+            candidates: [
+              {
+                content: { parts: [{ text: `here is the key ${secret} value` }] },
+                finishReason: "STOP",
+              },
+            ],
+            usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 8, totalTokenCount: 9 },
+          },
+        ]),
+      );
+      const streamFn = createGoogleGenerativeAiTransportStreamFn();
+      const handle = await Promise.resolve(
+        streamFn(
+          buildGeminiModel(),
+          {
+            systemPrompt: "Be safe.",
+            messages: [{ role: "user", content: "leak", timestamp: 0 }],
+          } as never,
+          { apiKey: "gemini-api-key" } as never,
+        ),
+      );
+      // Drain
+      for await (const event of handle as AsyncIterable<unknown>) {
+        void event;
+      }
+      const result = await handle.result();
+      expect(result.stopReason).toBe("error");
+    });
+
+    it("suppresses Gemini functionCall after a firewall trip and emits no toolCall block", async () => {
+      const secret = "sk-not-a-real-format-firewall-google-tool-bbbb";
+      const { recordResolvedSecret } =
+        await import("openclaw/plugin-sdk/provider-transport-runtime");
+      recordResolvedSecret(secret);
+      guardedFetchMock.mockResolvedValueOnce(
+        buildSseResponse([
+          {
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    { text: `leaking ${secret} now` },
+                    { functionCall: { name: "lookup", args: { q: "x" } } },
+                  ],
+                },
+                finishReason: "STOP",
+              },
+            ],
+            usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 8, totalTokenCount: 9 },
+          },
+        ]),
+      );
+      const streamFn = createGoogleGenerativeAiTransportStreamFn();
+      const handle = await Promise.resolve(
+        streamFn(
+          buildGeminiModel(),
+          {
+            systemPrompt: "Be safe.",
+            messages: [{ role: "user", content: "leak", timestamp: 0 }],
+          } as never,
+          { apiKey: "gemini-api-key" } as never,
+        ),
+      );
+      const events: { type?: string }[] = [];
+      for await (const event of handle as AsyncIterable<{ type?: string }>) {
+        events.push(event);
+      }
+      const result = await handle.result();
+      expect(result.stopReason).toBe("error");
+      expect(events.some((event) => event.type === "toolcall_start")).toBe(false);
+      expect(events.some((event) => event.type === "toolcall_end")).toBe(false);
+      expect(result.content.some((block) => block.type === "toolCall")).toBe(false);
+    });
+
+    it("leaves a clean Gemini stream untouched (no trip, stopReason=stop)", async () => {
+      const { recordResolvedSecret } =
+        await import("openclaw/plugin-sdk/provider-transport-runtime");
+      recordResolvedSecret("sk-not-a-real-format-google-unused-secret-cccc");
+      guardedFetchMock.mockResolvedValueOnce(
+        buildSseResponse([
+          {
+            candidates: [
+              {
+                content: { parts: [{ text: "all clean output here" }] },
+                finishReason: "STOP",
+              },
+            ],
+            usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 4, totalTokenCount: 5 },
+          },
+        ]),
+      );
+      const streamFn = createGoogleGenerativeAiTransportStreamFn();
+      const handle = await Promise.resolve(
+        streamFn(
+          buildGeminiModel(),
+          {
+            systemPrompt: "Be safe.",
+            messages: [{ role: "user", content: "clean", timestamp: 0 }],
+          } as never,
+          { apiKey: "gemini-api-key" } as never,
+        ),
+      );
+      for await (const event of handle as AsyncIterable<unknown>) {
+        void event;
+      }
+      const result = await handle.result();
+      expect(result.stopReason).toBe("stop");
+    });
   });
 });
 

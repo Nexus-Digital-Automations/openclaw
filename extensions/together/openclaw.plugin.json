@@ -4,7 +4,9 @@
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["together"],
+  "providers": [
+    "together"
+  ],
   "providerRequest": {
     "providers": {
       "together": {
@@ -16,7 +18,9 @@
     "providers": [
       {
         "id": "together",
-        "envVars": ["TOGETHER_API_KEY"]
+        "envVars": [
+          "TOGETHER_API_KEY"
+        ]
       }
     ]
   },
@@ -36,7 +40,9 @@
     }
   ],
   "contracts": {
-    "videoGenerationProviders": ["together"]
+    "videoGenerationProviders": [
+      "together"
+    ]
   },
   "modelCatalog": {
     "providers": {
@@ -48,7 +54,10 @@
             "id": "moonshotai/Kimi-K2.6",
             "name": "Kimi K2.6 FP4",
             "reasoning": true,
-            "input": ["text", "image"],
+            "input": [
+              "text",
+              "image"
+            ],
             "contextWindow": 262144,
             "maxTokens": 32768,
             "cost": {
@@ -61,7 +70,9 @@
           {
             "id": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
             "name": "Llama 3.3 70B Instruct Turbo",
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "contextWindow": 131072,
             "maxTokens": 8192,
             "cost": {
@@ -75,7 +86,9 @@
             "id": "deepseek-ai/DeepSeek-V4-Pro",
             "name": "DeepSeek V4 Pro",
             "reasoning": true,
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "contextWindow": 512000,
             "maxTokens": 8192,
             "cost": {
@@ -88,7 +101,9 @@
           {
             "id": "Qwen/Qwen2.5-7B-Instruct-Turbo",
             "name": "Qwen2.5 7B Instruct Turbo",
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "contextWindow": 32768,
             "maxTokens": 8192,
             "cost": {
@@ -102,7 +117,9 @@
             "id": "zai-org/GLM-5.1",
             "name": "GLM 5.1 FP4",
             "reasoning": true,
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "contextWindow": 202752,
             "maxTokens": 8192,
             "cost": {
@@ -123,5 +140,11 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {}
+  },
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "together"
+    ]
   }
 }

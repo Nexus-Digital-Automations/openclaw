@@ -4,9 +4,15 @@
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["google", "google-gemini-cli", "google-vertex"],
+  "providers": [
+    "google",
+    "google-gemini-cli",
+    "google-vertex"
+  ],
   "providerCatalogEntry": "./provider-discovery.ts",
-  "autoEnableWhenConfiguredProviders": ["google-gemini-cli"],
+  "autoEnableWhenConfiguredProviders": [
+    "google-gemini-cli"
+  ],
   "modelIdNormalization": {
     "providers": {
       "google": {
@@ -558,16 +564,22 @@
   "providerEndpoints": [
     {
       "endpointClass": "google-generative-ai",
-      "hosts": ["generativelanguage.googleapis.com"]
+      "hosts": [
+        "generativelanguage.googleapis.com"
+      ]
     },
     {
       "endpointClass": "google-vertex",
-      "hosts": ["aiplatform.googleapis.com"],
+      "hosts": [
+        "aiplatform.googleapis.com"
+      ],
       "googleVertexRegion": "global"
     },
     {
       "endpointClass": "google-vertex",
-      "hostSuffixes": ["-aiplatform.googleapis.com"],
+      "hostSuffixes": [
+        "-aiplatform.googleapis.com"
+      ],
       "googleVertexRegionHostSuffix": "-aiplatform.googleapis.com"
     }
   ],
@@ -588,8 +600,12 @@
     "providers": [
       {
         "id": "google-vertex",
-        "authMethods": ["api-key"],
-        "envVars": ["GOOGLE_CLOUD_API_KEY"],
+        "authMethods": [
+          "api-key"
+        ],
+        "envVars": [
+          "GOOGLE_CLOUD_API_KEY"
+        ],
         "authEvidence": [
           {
             "type": "local-file-with-env",
@@ -598,8 +614,13 @@
               "${HOME}/.config/gcloud/application_default_credentials.json",
               "${APPDATA}/gcloud/application_default_credentials.json"
             ],
-            "requiresAnyEnv": ["GOOGLE_CLOUD_PROJECT", "GCLOUD_PROJECT"],
-            "requiresAllEnv": ["GOOGLE_CLOUD_LOCATION"],
+            "requiresAnyEnv": [
+              "GOOGLE_CLOUD_PROJECT",
+              "GCLOUD_PROJECT"
+            ],
+            "requiresAllEnv": [
+              "GOOGLE_CLOUD_LOCATION"
+            ],
             "credentialMarker": "gcp-vertex-credentials",
             "source": "gcloud adc"
           }
@@ -607,11 +628,16 @@
       },
       {
         "id": "google",
-        "envVars": ["GEMINI_API_KEY", "GOOGLE_API_KEY"]
+        "envVars": [
+          "GEMINI_API_KEY",
+          "GOOGLE_API_KEY"
+        ]
       }
     ]
   },
-  "cliBackends": ["google-gemini-cli"],
+  "cliBackends": [
+    "google-gemini-cli"
+  ],
   "providerAuthChoices": [
     {
       "provider": "google",
@@ -656,18 +682,38 @@
     }
   },
   "contracts": {
-    "mediaUnderstandingProviders": ["google"],
-    "memoryEmbeddingProviders": ["gemini"],
-    "imageGenerationProviders": ["google"],
-    "musicGenerationProviders": ["google"],
-    "realtimeVoiceProviders": ["google"],
-    "speechProviders": ["google"],
-    "videoGenerationProviders": ["google"],
-    "webSearchProviders": ["gemini"]
+    "mediaUnderstandingProviders": [
+      "google"
+    ],
+    "memoryEmbeddingProviders": [
+      "gemini"
+    ],
+    "imageGenerationProviders": [
+      "google"
+    ],
+    "musicGenerationProviders": [
+      "google"
+    ],
+    "realtimeVoiceProviders": [
+      "google"
+    ],
+    "speechProviders": [
+      "google"
+    ],
+    "videoGenerationProviders": [
+      "google"
+    ],
+    "webSearchProviders": [
+      "gemini"
+    ]
   },
   "mediaUnderstandingProviderMetadata": {
     "google": {
-      "capabilities": ["image", "audio", "video"],
+      "capabilities": [
+        "image",
+        "audio",
+        "video"
+      ],
       "defaultModels": {
         "image": "gemini-3-flash-preview",
         "audio": "gemini-3-flash-preview",
@@ -678,11 +724,15 @@
         "audio": 40,
         "video": 10
       },
-      "nativeDocumentInputs": ["pdf"]
+      "nativeDocumentInputs": [
+        "pdf"
+      ]
     }
   },
   "configContracts": {
-    "compatibilityRuntimePaths": ["tools.web.search.apiKey"]
+    "compatibilityRuntimePaths": [
+      "tools.web.search.apiKey"
+    ]
   },
   "configSchema": {
     "type": "object",
@@ -693,7 +743,10 @@
         "additionalProperties": false,
         "properties": {
           "apiKey": {
-            "type": ["string", "object"]
+            "type": [
+              "string",
+              "object"
+            ]
           },
           "model": {
             "type": "string"
@@ -704,5 +757,13 @@
         }
       }
     }
+  },
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "google",
+      "google-gemini-cli",
+      "google-vertex"
+    ]
   }
 }

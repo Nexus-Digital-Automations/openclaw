@@ -10,12 +10,16 @@
     "providers": [
       {
         "id": "inworld",
-        "envVars": ["INWORLD_API_KEY"]
+        "envVars": [
+          "INWORLD_API_KEY"
+        ]
       }
     ]
   },
   "contracts": {
-    "speechProviders": ["inworld"]
+    "speechProviders": [
+      "inworld"
+    ]
   },
   "configSchema": {
     "type": "object",
@@ -44,5 +48,8 @@
         "description": "Sampling temperature 0..2."
       }
     }
+  },
+  "capabilities": {
+    "hooks": []
   }
 }

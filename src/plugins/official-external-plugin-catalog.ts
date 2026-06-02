@@ -1,15 +1,18 @@
 import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
 import { uniqueStrings } from "@openclaw/normalization-core/string-normalization";
+import officialExternalCatalogSignature from "../../scripts/lib/official-external-catalog-signature.json" with { type: "json" };
 import officialExternalChannelCatalog from "../../scripts/lib/official-external-channel-catalog.json" with { type: "json" };
 import officialExternalPluginCatalog from "../../scripts/lib/official-external-plugin-catalog.json" with { type: "json" };
 import officialExternalProviderCatalog from "../../scripts/lib/official-external-provider-catalog.json" with { type: "json" };
 import { MANIFEST_KEY } from "../compat/legacy-names.js";
+import { PluginSigningError, type PluginSignatureSidecar } from "../security/plugin-signing.js";
 import { isRecord } from "../utils.js";
 import type {
   PluginManifestChannelConfig,
   PluginManifestContracts,
   PluginPackageInstall,
 } from "./manifest.js";
+import { verifyOfficialCatalogSignature } from "./official-catalog-signature.js";
 
 type ManifestKey = typeof MANIFEST_KEY;
 
@@ -82,6 +85,42 @@ const OFFICIAL_CATALOG_SOURCES = [
   officialExternalProviderCatalog,
   officialExternalPluginCatalog,
 ] as const;
+
+/**
+ * The exact bytes the official-catalog signature covers. The maintainer signer
+ * (`scripts/sign-official-catalog.mjs`) hashes this same value via the shared
+ * `canonicalCatalogHashHex`, so build-time signing and load-time verification
+ * cannot drift apart.
+ *
+ * @stable
+ */
+export function officialCatalogSignaturePayload(): unknown {
+  return OFFICIAL_CATALOG_SOURCES;
+}
+
+// Verify once per process: the official catalog is a trust anchor (it declares
+// which npm/clawhub specs are "official"), so a tampered catalog could redirect
+// installs. An absent signature (`sidecar: null`) is the unsigned baseline and
+// is allowed (opt-in rollout); a present-but-invalid signature is a security
+// incident and refuses the catalog rather than serving redirected specs.
+let officialCatalogSignatureChecked = false;
+function assertOfficialCatalogSignature(): void {
+  if (officialCatalogSignatureChecked) {
+    return;
+  }
+  const sidecar = (officialExternalCatalogSignature as { sidecar?: PluginSignatureSidecar | null })
+    .sidecar;
+  if (sidecar) {
+    const verdict = verifyOfficialCatalogSignature(officialCatalogSignaturePayload(), sidecar);
+    if (!verdict.ok) {
+      throw new PluginSigningError(
+        "plugin.catalog.signature_invalid",
+        `official external catalog signature is invalid: ${verdict.reason}`,
+      );
+    }
+  }
+  officialCatalogSignatureChecked = true;
+}
 
 function parseCatalogEntries(raw: unknown): OfficialExternalPluginCatalogEntry[] {
   if (Array.isArray(raw)) {
@@ -172,6 +211,7 @@ export function resolveOfficialExternalPluginInstall(
 }
 
 export function listOfficialExternalPluginCatalogEntries(): OfficialExternalPluginCatalogEntry[] {
+  assertOfficialCatalogSignature();
   const entries = OFFICIAL_CATALOG_SOURCES.flatMap((source) => parseCatalogEntries(source));
   const resolved = new Map<string, OfficialExternalPluginCatalogEntry>();
   for (const entry of entries) {

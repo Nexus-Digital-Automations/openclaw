@@ -7,16 +7,23 @@
     "providers": [
       {
         "id": "gradium",
-        "envVars": ["GRADIUM_API_KEY"]
+        "envVars": [
+          "GRADIUM_API_KEY"
+        ]
       }
     ]
   },
   "contracts": {
-    "speechProviders": ["gradium"]
+    "speechProviders": [
+      "gradium"
+    ]
   },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
     "properties": {}
+  },
+  "capabilities": {
+    "hooks": []
   }
 }

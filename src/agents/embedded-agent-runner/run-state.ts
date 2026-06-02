@@ -63,6 +63,13 @@ const embeddedRunState = resolveGlobalSingleton(EMBEDDED_RUN_STATE_KEY, () => ({
   abandonedRunSessionIdsByFile: new Map<string, string>(),
   waiters: new Map<string, Set<EmbeddedRunWaiter>>(),
   modelSwitchRequests: new Map<string, EmbeddedRunModelSwitchRequest>(),
+  // D-0 — per-session previous-turn correlationId, populated at turn-end so
+  // the next turn's context-load can ask "was the previous turn tainted?"
+  // without re-scanning the transcript. Process-restart resets it; the disk
+  // taint store at logs/context-taint.ndjson provides the cross-restart
+  // answer that the next turn's context-load consults via the consumer
+  // helpers wired in D.7.
+  priorRunCorrelationIdsBySession: new Map<string, string>(),
 }));
 
 export const ACTIVE_EMBEDDED_RUNS =
@@ -92,6 +99,32 @@ export const EMBEDDED_RUN_WAITERS =
 export const EMBEDDED_RUN_MODEL_SWITCH_REQUESTS =
   embeddedRunState.modelSwitchRequests ??
   (embeddedRunState.modelSwitchRequests = new Map<string, EmbeddedRunModelSwitchRequest>());
+const PRIOR_RUN_CORRELATION_IDS_BY_SESSION =
+  embeddedRunState.priorRunCorrelationIdsBySession ??
+  (embeddedRunState.priorRunCorrelationIdsBySession = new Map<string, string>());
+
+export function getPriorRunCorrelationId(sessionId: string): string | undefined {
+  if (typeof sessionId !== "string" || sessionId.length === 0) {
+    return undefined;
+  }
+  return PRIOR_RUN_CORRELATION_IDS_BY_SESSION.get(sessionId);
+}
+
+export function setPriorRunCorrelationId(sessionId: string, correlationId: string): void {
+  if (
+    typeof sessionId !== "string" ||
+    sessionId.length === 0 ||
+    typeof correlationId !== "string" ||
+    correlationId.length === 0
+  ) {
+    return;
+  }
+  PRIOR_RUN_CORRELATION_IDS_BY_SESSION.set(sessionId, correlationId);
+}
+
+export function clearPriorRunCorrelationIdsForTests(): void {
+  PRIOR_RUN_CORRELATION_IDS_BY_SESSION.clear();
+}
 
 export function getActiveEmbeddedRunCount(): number {
   let activeCount = ACTIVE_EMBEDDED_RUNS.size;

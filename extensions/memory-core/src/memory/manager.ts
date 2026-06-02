@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import type { FSWatcher } from "chokidar";
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
@@ -14,6 +15,7 @@ import {
   readMemoryFile,
   type MemoryEmbeddingProbeResult,
   type MemoryProviderStatus,
+  type MemoryReclassifyResult,
   type MemorySearchManager,
   type MemorySearchRuntimeDebug,
   type MemorySearchResult,
@@ -21,6 +23,10 @@ import {
   type MemorySyncProgressUpdate,
 } from "openclaw/plugin-sdk/memory-core-host-engine-storage";
 import { uniqueValues } from "openclaw/plugin-sdk/string-coerce-runtime";
+import {
+  classifyZoneWithResolvedConfig,
+  resolveWorkspaceZoneConfig,
+} from "openclaw/plugin-sdk/security-runtime";
 import {
   createEmbeddingProvider,
   type EmbeddingProvider,
@@ -1020,6 +1026,39 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
       const message = formatErrorMessage(err);
       return this.cacheProbeResult({ ok: false, error: message });
     }
+  }
+
+  // Re-runs workspace-zones classification over every chunks row and updates
+  // origin_source where the zone now resolves to a different value. Idempotent:
+  // a second run produces zero updates. Use after C.1 migration (legacy rows
+  // default to 'trusted') or after operators change their untrusted-zone
+  // configuration.
+  async reclassify(): Promise<MemoryReclassifyResult> {
+    const zoneConfig = resolveWorkspaceZoneConfig();
+    const rows = this.db.prepare("SELECT id, path, origin_source FROM chunks").all() as Array<{
+      id: string;
+      path: string;
+      origin_source: string | null;
+    }>;
+    const updateStmt = this.db.prepare("UPDATE chunks SET origin_source = ? WHERE id = ?");
+    let updated = 0;
+    for (const row of rows) {
+      const absPath = path.resolve(this.workspaceDir, row.path);
+      const zone = classifyZoneWithResolvedConfig(absPath, zoneConfig);
+      const nextOrigin = zone === "untrusted" ? "untrusted" : "trusted";
+      if (row.origin_source !== nextOrigin) {
+        updateStmt.run(nextOrigin, row.id);
+        updated += 1;
+      }
+    }
+    log.info("memory reclassify complete", {
+      event: "memory_reclassify.complete",
+      agent_id: this.agentId,
+      workspace_dir: this.workspaceDir,
+      total: rows.length,
+      updated,
+    });
+    return { total: rows.length, updated };
   }
 
   async close(): Promise<void> {

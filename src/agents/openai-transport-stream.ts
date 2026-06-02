@@ -28,6 +28,16 @@ import { redactSensitiveText } from "../logging/redact.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import type { ProviderRuntimeModel } from "../plugins/provider-runtime-model.types.js";
 import { resolveProviderTransportTurnStateWithPlugin } from "../plugins/provider-runtime.js";
+import {
+  createOutputFirewall,
+  recordEnvelopeNonce,
+  snapshotFirewallInputs,
+} from "../security/output-firewall.js";
+import {
+  envelopeHash,
+  GENESIS_PREV_HASH,
+  mintEnvelope,
+} from "../security/verified-cmd.js";
 import { isGemma4ModelId } from "../shared/google-models.js";
 import { createReasoningTagTextPartitioner } from "../shared/text/reasoning-tag-text-partitioner.js";
 import { CHARS_PER_TOKEN_ESTIMATE, estimateStringChars } from "../utils/cjk-chars.js";
@@ -66,6 +76,7 @@ import {
   normalizeOpenAIStrictToolParameters,
   resolveOpenAIStrictToolFlagForInventory,
 } from "./openai-tool-schema.js";
+import { createOutputFirewallState, scanOutputChunk } from "./output-firewall.js";
 import { resolveProviderRequestPolicyConfig } from "./provider-request-config.js";
 import {
   buildGuardedModelFetch,
@@ -1426,6 +1437,36 @@ async function processResponsesStream(
   const eventTypes = new Map<string, number>();
   const sseDebugMode = resolveModelSseDebugMode();
   const blockIndex = () => output.content.length - 1;
+  let firewallState = createOutputFirewallState();
+  // Turn-level AC firewall: distinct from the per-delta sanitizer above.
+  // The sanitizer rewrites sensitive bytes in transit; this gate trips the
+  // whole turn so no tool call is dispatched once a leak is seen.
+  const turnFirewall = createOutputFirewall(snapshotFirewallInputs());
+  let firewallTripped = false;
+  // P1.1 verified-cmd chain head, turn-scoped per verified-cmd.ts invariant.
+  // Each minted envelope's hash becomes the next envelope's prevHash.
+  let verifiedCmdChainHead = GENESIS_PREV_HASH;
+  const tripResponsesFirewall = (family: string, literalLength: number, offset: number): void => {
+    firewallTripped = true;
+    output.stopReason = "error";
+    log.warn(`[output-firewall] turn aborted: responses text echoed sensitive literal`, {
+      event: "output_firewall.trip",
+      family,
+      literal: "<redacted>",
+      literal_length: literalLength,
+      offset,
+      sessionId: options?.sessionId,
+    });
+  };
+  const scanResponsesTextForTurnTrip = (chunk: string): void => {
+    if (firewallTripped || chunk.length === 0) {
+      return;
+    }
+    const trip = turnFirewall.scan(chunk);
+    if (trip !== null) {
+      tripResponsesFirewall(trip.family, trip.literal.length, trip.offset);
+    }
+  };
   const guardedStream = withResponsesFirstEventTimeout(
     openaiStream,
     model,
@@ -1467,6 +1508,18 @@ async function processResponsesStream(
         output.content.push(currentBlock);
         stream.push({ type: "text_start", contentIndex: blockIndex(), partial: output });
       } else if (item.type === "function_call") {
+        if (firewallTripped) {
+          // Sensitive literal already echoed this turn; refuse to dispatch
+          // tool call so the tool path cannot act on the leaked context.
+          log.warn("[output-firewall] suppressing OpenAI responses tool_use after firewall trip", {
+            event: "output_firewall.tool_suppressed",
+            tool_name: stringifyUnknown(item.name, "<unknown>"),
+            sessionId: options?.sessionId,
+          });
+          currentItem = null;
+          currentBlock = null;
+          continue;
+        }
         currentItem = item;
         currentBlock = {
           type: "toolCall",
@@ -1490,11 +1543,22 @@ async function processResponsesStream(
       }
     } else if (type === "response.output_text.delta" || type === "response.refusal.delta") {
       if (currentItem?.type === "message" && currentBlock?.type === "text") {
-        currentBlock.text = `${stringifyUnknown(currentBlock.text)}${stringifyUnknown(event.delta)}`;
+        const rawDelta = stringifyUnknown(event.delta);
+        scanResponsesTextForTurnTrip(rawDelta);
+        const verdict = scanOutputChunk(rawDelta, firewallState);
+        firewallState = verdict.nextState;
+        if (verdict.kind === "block") {
+          log.warn(
+            `[output-firewall] blocked OpenAI text delta with sensitive literal match=${verdict.matched.length}b session=${options?.sessionId ?? "<unknown>"}`,
+            { event: "output_firewall.block", sessionId: options?.sessionId },
+          );
+        }
+        const safeDelta = verdict.kind === "block" ? verdict.sanitized : rawDelta;
+        currentBlock.text = `${stringifyUnknown(currentBlock.text)}${safeDelta}`;
         stream.push({
           type: "text_delta",
           contentIndex: blockIndex(),
-          delta: stringifyUnknown(event.delta),
+          delta: safeDelta,
           partial: output,
         });
       }
@@ -1558,19 +1622,34 @@ async function processResponsesStream(
         });
         currentBlock = null;
       } else if (item.type === "function_call") {
+        if (firewallTripped) {
+          currentBlock = null;
+          continue;
+        }
         const args =
           currentBlock?.type === "toolCall" && currentBlock.partialJson
             ? parseStreamingJson(stringifyJsonLike(currentBlock.partialJson, "{}"))
             : parseStreamingJson(stringifyJsonLike(item.arguments, "{}"));
+        const toolName = stringifyUnknown(item.name);
+        // P1.1: mint envelope once args are finalized. Chain head moves
+        // forward only on successful mint, preserving turn order.
+        const envelope = mintEnvelope({ name: toolName, args }, "model", verifiedCmdChainHead);
+        verifiedCmdChainHead = envelopeHash(envelope);
+        recordEnvelopeNonce(envelope.nonce);
+        const finalizedToolCall = {
+          type: "toolCall",
+          id: `${stringifyUnknown(item.call_id)}|${stringifyUnknown(item.id)}`,
+          name: toolName,
+          arguments: args,
+          verifiedCmd: envelope,
+        };
+        if (currentBlock?.type === "toolCall") {
+          currentBlock.verifiedCmd = envelope;
+        }
         stream.push({
           type: "toolcall_end",
           contentIndex: blockIndex(),
-          toolCall: {
-            type: "toolCall",
-            id: `${stringifyUnknown(item.call_id)}|${stringifyUnknown(item.id)}`,
-            name: stringifyUnknown(item.name),
-            arguments: args,
-          },
+          toolCall: finalizedToolCall,
           partial: output,
         });
         currentBlock = null;
@@ -1617,12 +1696,14 @@ async function processResponsesStream(
             options.serviceTier,
         );
       }
-      output.stopReason = mapResponsesStopReason(response?.status as string | undefined);
-      if (
-        output.content.some((block) => block.type === "toolCall") &&
-        output.stopReason === "stop"
-      ) {
-        output.stopReason = "toolUse";
+      if (!firewallTripped) {
+        output.stopReason = mapResponsesStopReason(response?.status as string | undefined);
+        if (
+          output.content.some((block) => block.type === "toolCall") &&
+          output.stopReason === "stop"
+        ) {
+          output.stopReason = "toolUse";
+        }
       }
     } else if (type === "error") {
       throw new Error(
@@ -2528,6 +2609,30 @@ async function processOpenAICompletionsStream(
     ? createDeepSeekTextFilter()
     : null;
   const reasoningTagTextPartitioner = createReasoningTagTextPartitioner();
+  // Turn-level AC firewall: trips the whole turn on first echoed sensitive
+  // literal so that tool calls cannot dispatch on leaked context.
+  const turnFirewall = createOutputFirewall(snapshotFirewallInputs());
+  let firewallTripped = false;
+  const tripCompletionsFirewall = (family: string, literalLength: number, offset: number): void => {
+    firewallTripped = true;
+    output.stopReason = "error";
+    log.warn(`[output-firewall] turn aborted: completions text echoed sensitive literal`, {
+      event: "output_firewall.trip",
+      family,
+      literal: "<redacted>",
+      literal_length: literalLength,
+      offset,
+    });
+  };
+  const scanCompletionsTextForTurnTrip = (chunk: string): void => {
+    if (firewallTripped || chunk.length === 0) {
+      return;
+    }
+    const trip = turnFirewall.scan(chunk);
+    if (trip !== null) {
+      tripCompletionsFirewall(trip.family, trip.literal.length, trip.offset);
+    }
+  };
   type ToolCallBlock = {
     type: "toolCall";
     id: string;
@@ -2604,6 +2709,7 @@ async function processOpenAICompletionsStream(
     });
   };
   const appendTextDeltaInternal = (text: string) => {
+    scanCompletionsTextForTurnTrip(text);
     if (!currentBlock || currentBlock.type !== "text") {
       finishCurrentBlock();
       currentBlock = { type: "text", text: "" };
@@ -2714,7 +2820,7 @@ async function processOpenAICompletionsStream(
     if (!chunk.usage && choiceUsage) {
       output.usage = parseTransportChunkUsage(choiceUsage, model);
     }
-    if (choice.finish_reason) {
+    if (choice.finish_reason && !firewallTripped) {
       const finishReasonResult = mapStopReason(choice.finish_reason);
       output.stopReason = finishReasonResult.stopReason;
       if (finishReasonResult.stopReason === "stop") {
@@ -2768,7 +2874,14 @@ async function processOpenAICompletionsStream(
         appendThinkingDelta(reasoningDelta);
       }
     }
-    if (choiceDelta.tool_calls && choiceDelta.tool_calls.length > 0) {
+    if (choiceDelta.tool_calls && choiceDelta.tool_calls.length > 0 && firewallTripped) {
+      for (const suppressed of choiceDelta.tool_calls) {
+        log.warn("[output-firewall] suppressing OpenAI completions tool_use after firewall trip", {
+          event: "output_firewall.tool_suppressed",
+          tool_name: suppressed.function?.name ?? "<unknown>",
+        });
+      }
+    } else if (choiceDelta.tool_calls && choiceDelta.tool_calls.length > 0) {
       flushReasoningTagTextPartitionerAtEnd();
       for (const toolCall of choiceDelta.tool_calls) {
         const streamIndex = typeof toolCall.index === "number" ? toolCall.index : undefined;

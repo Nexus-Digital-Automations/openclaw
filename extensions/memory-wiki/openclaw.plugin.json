@@ -1,14 +1,25 @@
 {
   "id": "memory-wiki",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": true
   },
   "name": "Memory Wiki",
   "description": "Persistent wiki compiler and Obsidian-friendly knowledge vault for OpenClaw.",
   "contracts": {
-    "tools": ["wiki_apply", "wiki_get", "wiki_lint", "wiki_search", "wiki_status"]
+    "tools": [
+      "wiki_apply",
+      "wiki_get",
+      "wiki_lint",
+      "wiki_search",
+      "wiki_status"
+    ]
   },
-  "skills": ["./skills"],
+  "skills": [
+    "./skills"
+  ],
   "uiHints": {
     "vaultMode": {
       "label": "Vault Mode",
@@ -49,7 +60,11 @@
     "properties": {
       "vaultMode": {
         "type": "string",
-        "enum": ["isolated", "bridge", "unsafe-local"]
+        "enum": [
+          "isolated",
+          "bridge",
+          "unsafe-local"
+        ]
       },
       "vault": {
         "type": "object",
@@ -60,7 +75,10 @@
           },
           "renderMode": {
             "type": "string",
-            "enum": ["native", "obsidian"]
+            "enum": [
+              "native",
+              "obsidian"
+            ]
           }
         }
       },
@@ -143,11 +161,18 @@
         "properties": {
           "backend": {
             "type": "string",
-            "enum": ["shared", "local"]
+            "enum": [
+              "shared",
+              "local"
+            ]
           },
           "corpus": {
             "type": "string",
-            "enum": ["wiki", "memory", "all"]
+            "enum": [
+              "wiki",
+              "memory",
+              "all"
+            ]
           }
         }
       },
@@ -178,7 +203,13 @@
     }
   },
   "configContracts": {
-    "compatibilityMigrationPaths": ["plugins.entries.memory-wiki.config.bridge.readMemoryCore"]
+    "compatibilityMigrationPaths": [
+      "plugins.entries.memory-wiki.config.bridge.readMemoryCore"
+    ]
   },
-  "commandAliases": [{ "name": "wiki" }]
+  "commandAliases": [
+    {
+      "name": "wiki"
+    }
+  ]
 }

@@ -8,17 +8,25 @@
     "providers": [
       {
         "id": "deepgram",
-        "envVars": ["DEEPGRAM_API_KEY"]
+        "envVars": [
+          "DEEPGRAM_API_KEY"
+        ]
       }
     ]
   },
   "contracts": {
-    "mediaUnderstandingProviders": ["deepgram"],
-    "realtimeTranscriptionProviders": ["deepgram"]
+    "mediaUnderstandingProviders": [
+      "deepgram"
+    ],
+    "realtimeTranscriptionProviders": [
+      "deepgram"
+    ]
   },
   "mediaUnderstandingProviderMetadata": {
     "deepgram": {
-      "capabilities": ["audio"],
+      "capabilities": [
+        "audio"
+      ],
       "defaultModels": {
         "audio": "nova-3"
       },
@@ -31,5 +39,8 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {}
+  },
+  "capabilities": {
+    "hooks": []
   }
 }

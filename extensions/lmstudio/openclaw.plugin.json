@@ -4,7 +4,9 @@
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["lmstudio"],
+  "providers": [
+    "lmstudio"
+  ],
   "providerRequest": {
     "providers": {
       "lmstudio": {
@@ -22,13 +24,19 @@
       }
     }
   },
-  "nonSecretAuthMarkers": ["lmstudio-local"],
-  "syntheticAuthRefs": ["lmstudio"],
+  "nonSecretAuthMarkers": [
+    "lmstudio-local"
+  ],
+  "syntheticAuthRefs": [
+    "lmstudio"
+  ],
   "setup": {
     "providers": [
       {
         "id": "lmstudio",
-        "envVars": ["LM_API_TOKEN"]
+        "envVars": [
+          "LM_API_TOKEN"
+        ]
       }
     ]
   },
@@ -49,11 +57,19 @@
     }
   ],
   "contracts": {
-    "memoryEmbeddingProviders": ["lmstudio"]
+    "memoryEmbeddingProviders": [
+      "lmstudio"
+    ]
   },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
     "properties": {}
+  },
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "lmstudio"
+    ]
   }
 }

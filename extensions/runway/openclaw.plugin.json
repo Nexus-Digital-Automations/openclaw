@@ -8,7 +8,10 @@
     "providers": [
       {
         "id": "runway",
-        "envVars": ["RUNWAYML_API_SECRET", "RUNWAY_API_KEY"]
+        "envVars": [
+          "RUNWAYML_API_SECRET",
+          "RUNWAY_API_KEY"
+        ]
       }
     ]
   },
@@ -21,7 +24,9 @@
       "groupId": "runway",
       "groupLabel": "Runway",
       "groupHint": "API key",
-      "onboardingScopes": ["image-generation"],
+      "onboardingScopes": [
+        "image-generation"
+      ],
       "optionKey": "runwayApiKey",
       "cliFlag": "--runway-api-key",
       "cliOption": "--runway-api-key <key>",
@@ -29,11 +34,16 @@
     }
   ],
   "contracts": {
-    "videoGenerationProviders": ["runway"]
+    "videoGenerationProviders": [
+      "runway"
+    ]
   },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
     "properties": {}
+  },
+  "capabilities": {
+    "hooks": []
   }
 }

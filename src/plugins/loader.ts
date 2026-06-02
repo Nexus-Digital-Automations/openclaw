@@ -116,6 +116,7 @@ import {
   restoreMemoryPluginState,
 } from "./memory-state.js";
 import { unwrapDefaultModuleExport } from "./module-export.js";
+import { hydratePluginCapabilityGate } from "./plugin-capabilities-manifest.js";
 import {
   fingerprintPluginDiscoveryContext,
   resolvePluginDiscoveryContext,
@@ -2066,6 +2067,17 @@ export function loadOpenClawPlugins(options: PluginLoadOptions = {}): PluginRegi
       record.kind = manifestRecord.kind;
       record.configUiHints = manifestRecord.configUiHints;
       record.configJsonSchema = manifestRecord.configSchema;
+      // F.4 — re-read the security capability surface (not in memory after
+      // manifest load) and stamp the enforcement mode from the install record,
+      // so the hook hard-block survives a gateway restart. Best-effort: a
+      // malformed manifest logs + grandfathers rather than failing the load.
+      hydratePluginCapabilityGate({
+        pluginId,
+        rootDir: candidate.rootDir,
+        origin: candidate.origin,
+        installRecord: installRecords[pluginId],
+        logger,
+      });
       const pushPluginLoadError = (message: string) => {
         record.status = "error";
         record.error = message;

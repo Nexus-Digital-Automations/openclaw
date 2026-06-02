@@ -237,6 +237,7 @@ export function createGatewayAuxHandlers(params: {
             optionalActivePaths,
             providerOverrides,
             targetIds,
+            sessionId,
           }) => {
             const { assignments, diagnostics, inactiveRefPaths } =
               await resolveCommandSecretsFromActiveRuntimeSnapshot({
@@ -248,6 +249,7 @@ export function createGatewayAuxHandlers(params: {
                   ? { optionalActivePaths: new Set(optionalActivePaths) }
                   : {}),
                 ...(providerOverrides ? { providerOverrides } : {}),
+                ...(sessionId ? { sessionId } : {}),
               });
             if (assignments.length === 0) {
               return {

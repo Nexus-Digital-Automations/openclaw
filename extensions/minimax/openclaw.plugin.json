@@ -4,20 +4,37 @@
     "onStartup": false
   },
   "enabledByDefault": true,
-  "legacyPluginIds": ["minimax-portal-auth"],
-  "providers": ["minimax", "minimax-portal"],
+  "legacyPluginIds": [
+    "minimax-portal-auth"
+  ],
+  "providers": [
+    "minimax",
+    "minimax-portal"
+  ],
   "providerCatalogEntry": "./provider-discovery.ts",
-  "autoEnableWhenConfiguredProviders": ["minimax", "minimax-portal"],
-  "nonSecretAuthMarkers": ["minimax-oauth"],
+  "autoEnableWhenConfiguredProviders": [
+    "minimax",
+    "minimax-portal"
+  ],
+  "nonSecretAuthMarkers": [
+    "minimax-oauth"
+  ],
   "setup": {
     "providers": [
       {
         "id": "minimax",
-        "envVars": ["MINIMAX_CODE_PLAN_KEY", "MINIMAX_CODING_API_KEY", "MINIMAX_API_KEY"]
+        "envVars": [
+          "MINIMAX_CODE_PLAN_KEY",
+          "MINIMAX_CODING_API_KEY",
+          "MINIMAX_API_KEY"
+        ]
       },
       {
         "id": "minimax-portal",
-        "envVars": ["MINIMAX_OAUTH_TOKEN", "MINIMAX_API_KEY"]
+        "envVars": [
+          "MINIMAX_OAUTH_TOKEN",
+          "MINIMAX_API_KEY"
+        ]
       }
     ]
   },
@@ -40,7 +57,12 @@
       "provider": "minimax",
       "method": "api-global",
       "choiceId": "minimax-global-api",
-      "deprecatedChoiceIds": ["minimax", "minimax-api", "minimax-cloud", "minimax-api-lightning"],
+      "deprecatedChoiceIds": [
+        "minimax",
+        "minimax-api",
+        "minimax-cloud",
+        "minimax-api-lightning"
+      ],
       "choiceLabel": "MiniMax API key (Global)",
       "choiceHint": "Global endpoint - api.minimax.io",
       "groupId": "minimax",
@@ -65,7 +87,9 @@
       "provider": "minimax",
       "method": "api-cn",
       "choiceId": "minimax-cn-api",
-      "deprecatedChoiceIds": ["minimax-api-key-cn"],
+      "deprecatedChoiceIds": [
+        "minimax-api-key-cn"
+      ],
       "choiceLabel": "MiniMax API key (CN)",
       "choiceHint": "CN endpoint - api.minimaxi.com",
       "groupId": "minimax",
@@ -78,19 +102,39 @@
     }
   ],
   "contracts": {
-    "speechProviders": ["minimax"],
-    "mediaUnderstandingProviders": ["minimax", "minimax-portal"],
-    "imageGenerationProviders": ["minimax", "minimax-portal"],
-    "musicGenerationProviders": ["minimax", "minimax-portal"],
-    "videoGenerationProviders": ["minimax", "minimax-portal"],
-    "webSearchProviders": ["minimax"]
+    "speechProviders": [
+      "minimax"
+    ],
+    "mediaUnderstandingProviders": [
+      "minimax",
+      "minimax-portal"
+    ],
+    "imageGenerationProviders": [
+      "minimax",
+      "minimax-portal"
+    ],
+    "musicGenerationProviders": [
+      "minimax",
+      "minimax-portal"
+    ],
+    "videoGenerationProviders": [
+      "minimax",
+      "minimax-portal"
+    ],
+    "webSearchProviders": [
+      "minimax"
+    ]
   },
   "configContracts": {
-    "compatibilityRuntimePaths": ["tools.web.search.apiKey"]
+    "compatibilityRuntimePaths": [
+      "tools.web.search.apiKey"
+    ]
   },
   "mediaUnderstandingProviderMetadata": {
     "minimax": {
-      "capabilities": ["image"],
+      "capabilities": [
+        "image"
+      ],
       "defaultModels": {
         "image": "MiniMax-VL-01"
       },
@@ -105,7 +149,9 @@
       }
     },
     "minimax-portal": {
-      "capabilities": ["image"],
+      "capabilities": [
+        "image"
+      ],
       "defaultModels": {
         "image": "MiniMax-VL-01"
       },
@@ -141,14 +187,31 @@
         "additionalProperties": false,
         "properties": {
           "apiKey": {
-            "type": ["string", "object"]
+            "type": [
+              "string",
+              "object"
+            ]
           },
           "region": {
             "type": "string",
-            "enum": ["global", "cn"]
+            "enum": [
+              "global",
+              "cn"
+            ]
           }
         }
       }
     }
+  },
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "minimax",
+      "minimax-portal"
+    ],
+    "httpAllowlist": [
+      "api.minimaxi.com",
+      "api.minimax.io"
+    ]
   }
 }

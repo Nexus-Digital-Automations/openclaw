@@ -273,6 +273,7 @@ const PluginEntrySchema = z
       })
       .strict()
       .optional(),
+    requirePublisher: z.array(z.string()).optional(),
     config: z.record(z.string(), z.unknown()).optional(),
   })
   .strict();
@@ -1260,6 +1261,13 @@ export const OpenClawSchema = z
           .optional(),
         entries: z.record(z.string(), PluginEntrySchema).optional(),
         bundledDiscovery: z.enum(["compat", "allowlist"]).optional(),
+        publisherPolicy: z
+          .object({
+            requirePublisher: z.array(z.string()).optional(),
+            denyPublisher: z.array(z.string()).optional(),
+          })
+          .strict()
+          .optional(),
       })
       .strict()
       .optional(),

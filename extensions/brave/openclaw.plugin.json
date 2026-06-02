@@ -9,8 +9,12 @@
     "providers": [
       {
         "id": "brave",
-        "authMethods": ["api-key"],
-        "envVars": ["BRAVE_API_KEY"]
+        "authMethods": [
+          "api-key"
+        ],
+        "envVars": [
+          "BRAVE_API_KEY"
+        ]
       }
     ]
   },
@@ -31,10 +35,14 @@
     }
   },
   "contracts": {
-    "webSearchProviders": ["brave"]
+    "webSearchProviders": [
+      "brave"
+    ]
   },
   "configContracts": {
-    "compatibilityRuntimePaths": ["tools.web.search.apiKey"]
+    "compatibilityRuntimePaths": [
+      "tools.web.search.apiKey"
+    ]
   },
   "configSchema": {
     "type": "object",
@@ -45,17 +53,29 @@
         "additionalProperties": false,
         "properties": {
           "apiKey": {
-            "type": ["string", "object"]
+            "type": [
+              "string",
+              "object"
+            ]
           },
           "mode": {
             "type": "string",
-            "enum": ["web", "llm-context"]
+            "enum": [
+              "web",
+              "llm-context"
+            ]
           },
           "baseUrl": {
-            "type": ["string", "object"]
+            "type": [
+              "string",
+              "object"
+            ]
           }
         }
       }
     }
+  },
+  "capabilities": {
+    "hooks": []
   }
 }

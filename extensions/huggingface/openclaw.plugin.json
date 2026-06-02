@@ -4,11 +4,15 @@
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["huggingface"],
+  "providers": [
+    "huggingface"
+  ],
   "modelIdNormalization": {
     "providers": {
       "huggingface": {
-        "stripPrefixes": ["huggingface/"]
+        "stripPrefixes": [
+          "huggingface/"
+        ]
       }
     }
   },
@@ -16,7 +20,10 @@
     "providers": [
       {
         "id": "huggingface",
-        "envVars": ["HUGGINGFACE_HUB_TOKEN", "HF_TOKEN"]
+        "envVars": [
+          "HUGGINGFACE_HUB_TOKEN",
+          "HF_TOKEN"
+        ]
       }
     ]
   },
@@ -44,7 +51,9 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "enabled": { "type": "boolean" }
+          "enabled": {
+            "type": "boolean"
+          }
         }
       }
     }
@@ -58,5 +67,11 @@
       "label": "Enable Discovery",
       "help": "When false, OpenClaw keeps the Hugging Face plugin available but skips implicit startup discovery from ambient Hugging Face credentials."
     }
+  },
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "huggingface"
+    ]
   }
 }

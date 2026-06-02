@@ -5,13 +5,21 @@
   "activation": {
     "onStartup": false
   },
-  "channels": ["googlechat"],
+  "channels": [
+    "googlechat"
+  ],
   "channelEnvVars": {
-    "googlechat": ["GOOGLE_CHAT_SERVICE_ACCOUNT", "GOOGLE_CHAT_SERVICE_ACCOUNT_FILE"]
+    "googlechat": [
+      "GOOGLE_CHAT_SERVICE_ACCOUNT",
+      "GOOGLE_CHAT_SERVICE_ACCOUNT_FILE"
+    ]
   },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
     "properties": {}
+  },
+  "capabilities": {
+    "hooks": []
   }
 }

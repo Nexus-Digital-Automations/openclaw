@@ -2,13 +2,21 @@
   "id": "voice-call",
   "name": "Voice Call",
   "description": "OpenClaw voice-call plugin for Twilio, Telnyx, and Plivo phone calls.",
-  "commandAliases": [{ "name": "voicecall" }],
+  "commandAliases": [
+    {
+      "name": "voicecall"
+    }
+  ],
   "activation": {
     "onStartup": true,
-    "onCommands": ["voicecall"]
+    "onCommands": [
+      "voicecall"
+    ]
   },
   "contracts": {
-    "tools": ["voice_call"]
+    "tools": [
+      "voice_call"
+    ]
   },
   "channelEnvVars": {
     "voice-call": [
@@ -259,7 +267,12 @@
       },
       "provider": {
         "type": "string",
-        "enum": ["telnyx", "twilio", "plivo", "mock"]
+        "enum": [
+          "telnyx",
+          "twilio",
+          "plivo",
+          "mock"
+        ]
       },
       "telnyx": {
         "type": "object",
@@ -284,7 +297,10 @@
             "type": "string"
           },
           "authToken": {
-            "type": ["string", "object"]
+            "type": [
+              "string",
+              "object"
+            ]
           }
         }
       },
@@ -310,7 +326,12 @@
       },
       "inboundPolicy": {
         "type": "string",
-        "enum": ["disabled", "allowlist", "pairing", "open"]
+        "enum": [
+          "disabled",
+          "allowlist",
+          "pairing",
+          "open"
+        ]
       },
       "allowFrom": {
         "type": "array",
@@ -360,7 +381,10 @@
         "properties": {
           "defaultMode": {
             "type": "string",
-            "enum": ["notify", "conversation"]
+            "enum": [
+              "notify",
+              "conversation"
+            ]
           },
           "notifyHangupDelaySec": {
             "type": "integer",
@@ -414,7 +438,11 @@
         "properties": {
           "mode": {
             "type": "string",
-            "enum": ["off", "serve", "funnel"]
+            "enum": [
+              "off",
+              "serve",
+              "funnel"
+            ]
           },
           "path": {
             "type": "string"
@@ -427,7 +455,12 @@
         "properties": {
           "provider": {
             "type": "string",
-            "enum": ["none", "ngrok", "tailscale-serve", "tailscale-funnel"]
+            "enum": [
+              "none",
+              "ngrok",
+              "tailscale-serve",
+              "tailscale-funnel"
+            ]
           },
           "ngrokAuthToken": {
             "type": "string"
@@ -517,15 +550,32 @@
           },
           "toolPolicy": {
             "type": "string",
-            "enum": ["safe-read-only", "owner", "none"]
+            "enum": [
+              "safe-read-only",
+              "owner",
+              "none"
+            ]
           },
           "consultPolicy": {
             "type": "string",
-            "enum": ["auto", "substantive", "always"]
+            "enum": [
+              "auto",
+              "substantive",
+              "always"
+            ]
           },
           "consultThinkingLevel": {
             "type": "string",
-            "enum": ["off", "minimal", "low", "medium", "high", "xhigh", "adaptive", "max"]
+            "enum": [
+              "off",
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "adaptive",
+              "max"
+            ]
           },
           "consultFastMode": {
             "type": "boolean"
@@ -538,7 +588,9 @@
               "properties": {
                 "type": {
                   "type": "string",
-                  "enum": ["function"]
+                  "enum": [
+                    "function"
+                  ]
                 },
                 "name": {
                   "type": "string"
@@ -552,7 +604,9 @@
                   "properties": {
                     "type": {
                       "type": "string",
-                      "enum": ["object"]
+                      "enum": [
+                        "object"
+                      ]
                     },
                     "properties": {
                       "type": "object",
@@ -565,10 +619,18 @@
                       }
                     }
                   },
-                  "required": ["type", "properties"]
+                  "required": [
+                    "type",
+                    "properties"
+                  ]
                 }
               },
-              "required": ["type", "name", "description", "parameters"]
+              "required": [
+                "type",
+                "name",
+                "description",
+                "parameters"
+              ]
             }
           },
           "fastContext": {
@@ -591,7 +653,10 @@
                 "minItems": 1,
                 "items": {
                   "type": "string",
-                  "enum": ["memory", "sessions"]
+                  "enum": [
+                    "memory",
+                    "sessions"
+                  ]
                 }
               },
               "fallbackToConsult": {
@@ -646,14 +711,22 @@
         "properties": {
           "auto": {
             "type": "string",
-            "enum": ["off", "always", "inbound", "tagged"]
+            "enum": [
+              "off",
+              "always",
+              "inbound",
+              "tagged"
+            ]
           },
           "enabled": {
             "type": "boolean"
           },
           "mode": {
             "type": "string",
-            "enum": ["final", "all"]
+            "enum": [
+              "final",
+              "all"
+            ]
           },
           "provider": {
             "type": "string"
@@ -699,7 +772,10 @@
                 "additionalProperties": false,
                 "properties": {
                   "apiKey": {
-                    "type": ["string", "object"]
+                    "type": [
+                      "string",
+                      "object"
+                    ]
                   },
                   "baseUrl": {
                     "type": "string"
@@ -713,7 +789,7 @@
                   "speed": {
                     "type": "number",
                     "minimum": 0.25,
-                    "maximum": 4.0
+                    "maximum": 4
                   },
                   "instructions": {
                     "type": "string"
@@ -725,7 +801,10 @@
                 "additionalProperties": false,
                 "properties": {
                   "apiKey": {
-                    "type": ["string", "object"]
+                    "type": [
+                      "string",
+                      "object"
+                    ]
                   },
                   "baseUrl": {
                     "type": "string"
@@ -743,7 +822,11 @@
                   },
                   "applyTextNormalization": {
                     "type": "string",
-                    "enum": ["auto", "on", "off"]
+                    "enum": [
+                      "auto",
+                      "on",
+                      "off"
+                    ]
                   },
                   "languageCode": {
                     "type": "string"
@@ -860,7 +943,10 @@
               "type": "object",
               "properties": {
                 "apiKey": {
-                  "type": ["string", "object"]
+                  "type": [
+                    "string",
+                    "object"
+                  ]
                 }
               },
               "additionalProperties": true
@@ -885,7 +971,10 @@
       },
       "sessionScope": {
         "type": "string",
-        "enum": ["per-phone", "per-call"]
+        "enum": [
+          "per-phone",
+          "per-call"
+        ]
       },
       "responseModel": {
         "type": "string"
@@ -900,14 +989,31 @@
     }
   },
   "configContracts": {
-    "compatibilityMigrationPaths": ["plugins.entries.voice-call.config"],
+    "compatibilityMigrationPaths": [
+      "plugins.entries.voice-call.config"
+    ],
     "secretInputs": {
       "paths": [
-        { "path": "twilio.authToken", "expected": "string" },
-        { "path": "realtime.providers.*.apiKey", "expected": "string" },
-        { "path": "streaming.providers.*.apiKey", "expected": "string" },
-        { "path": "tts.providers.*.apiKey", "expected": "string" }
+        {
+          "path": "twilio.authToken",
+          "expected": "string"
+        },
+        {
+          "path": "realtime.providers.*.apiKey",
+          "expected": "string"
+        },
+        {
+          "path": "streaming.providers.*.apiKey",
+          "expected": "string"
+        },
+        {
+          "path": "tts.providers.*.apiKey",
+          "expected": "string"
+        }
       ]
     }
+  },
+  "capabilities": {
+    "hooks": []
   }
 }

@@ -1,9 +1,14 @@
 {
   "id": "qa-channel",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": false
   },
-  "channels": ["qa-channel"],
+  "channels": [
+    "qa-channel"
+  ],
   "configSchema": {
     "type": "object",
     "additionalProperties": false,

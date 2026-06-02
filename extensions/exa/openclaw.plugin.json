@@ -7,7 +7,9 @@
     "providers": [
       {
         "id": "exa",
-        "envVars": ["EXA_API_KEY"]
+        "envVars": [
+          "EXA_API_KEY"
+        ]
       }
     ]
   },
@@ -24,10 +26,14 @@
     }
   },
   "contracts": {
-    "webSearchProviders": ["exa"]
+    "webSearchProviders": [
+      "exa"
+    ]
   },
   "configContracts": {
-    "compatibilityRuntimePaths": ["tools.web.search.apiKey"]
+    "compatibilityRuntimePaths": [
+      "tools.web.search.apiKey"
+    ]
   },
   "configSchema": {
     "type": "object",
@@ -38,7 +44,10 @@
         "additionalProperties": false,
         "properties": {
           "apiKey": {
-            "type": ["string", "object"]
+            "type": [
+              "string",
+              "object"
+            ]
           },
           "baseUrl": {
             "type": "string"
@@ -46,5 +55,8 @@
         }
       }
     }
+  },
+  "capabilities": {
+    "hooks": []
   }
 }

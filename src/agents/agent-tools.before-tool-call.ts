@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { addTimerTimeoutGraceMs } from "@openclaw/normalization-core/number-coercion";
@@ -38,7 +39,10 @@ import {
   type PluginHookToolInputKind,
   type PluginHookToolKind,
 } from "../plugins/types.js";
+import { tryAppendAuditEntry } from "../security/audit-chain.js";
+import { evaluateToolCall } from "../security/controller-judge.js";
 import { createLazyRuntimeSurface } from "../shared/lazy-runtime.js";
+import { scanArgvForExternalContent } from "../shared/process-external-content-bodies.js";
 import {
   resolveSkillTelemetrySource,
   resolveSkillTelemetrySourceValue,
@@ -110,7 +114,11 @@ export type HookContext = {
 };
 
 type HookBlockedKind = "veto" | "failure";
-type HookBlockedReason = "plugin-before-tool-call" | "plugin-approval" | "tool-loop";
+type HookBlockedReason =
+  | "plugin-before-tool-call"
+  | "plugin-approval"
+  | "tool-loop"
+  | "controller-rejection";
 type HookOutcome =
   | {
       blocked: true;
@@ -233,6 +241,38 @@ function buildAdjustedParamsKey(params: { runId?: string; toolCallId: string }):
     return `${params.runId}:${params.toolCallId}`;
   }
   return params.toolCallId;
+}
+
+// Exec-shaped tool names that get the external-content canary gate. Narrower
+// than `isLikelyMutatingToolName` (which includes `message`, `gateway`, etc.):
+// we only force operator approval for tools where embedding model-pasted
+// external content in argv is the dangerous case — shell execs and file
+// writes. `exec` mirrors `isExecToolName` in
+// pi-embedded-subscribe.handlers.tools.ts (the `bash` alias is folded into
+// `exec` by normalizeToolName before this gate runs); `write` mirrors the
+// fresh-content half of FILE_MUTATING_TOOL_NAMES in tool-mutation.ts (we omit
+// `edit` because that surface is scoped to existing content rather than
+// fresh attacker-controlled payload).
+const EXTERNAL_CONTENT_GATED_TOOL_NAMES: ReadonlySet<string> = new Set(["exec", "write"]);
+
+function isExternalContentGatedToolName(toolName: string): boolean {
+  return EXTERNAL_CONTENT_GATED_TOOL_NAMES.has(toolName);
+}
+
+function buildCanaryApprovalRequest(
+  toolName: string,
+  triggeredCanaries: readonly string[],
+): PluginApprovalRequest {
+  const canaryPreview = triggeredCanaries
+    .map((body) => (body.length > 60 ? `${body.slice(0, 57)}…` : body))
+    .join(", ");
+  return {
+    pluginId: "core.security.external-content-argv-gate",
+    title: "External-untrusted content detected in tool argv",
+    description: `Tool '${toolName}' argv embeds ${triggeredCanaries.length} external-content body literal(s) the gateway previously wrapped as untrusted: ${canaryPreview}. Operator approval required.`,
+    severity: "warning",
+    allowedDecisions: ["allow-once", "deny"],
+  };
 }
 
 function mergeParamsWithApprovalOverrides(
@@ -419,6 +459,10 @@ async function requestPluginToolApproval(params: {
   signal?: AbortSignal;
   baseParams: unknown;
   overrideParams?: unknown;
+  // External-content body literals matched in argv; surfaced to the operator
+  // UI alongside the approval request so they can see WHICH untrusted block
+  // the model is forwarding.
+  triggeredCanaries?: readonly string[];
 }): Promise<HookOutcome> {
   const approval = params.approval;
   const timeoutMs = resolvePluginToolApprovalTimeoutMs(approval);
@@ -445,6 +489,9 @@ async function requestPluginToolApproval(params: {
         sessionKey: params.ctx?.sessionKey,
         timeoutMs,
         twoPhase: true,
+        ...(params.triggeredCanaries && params.triggeredCanaries.length > 0
+          ? { triggeredCanaries: params.triggeredCanaries }
+          : {}),
       },
       { expectFinal: false },
     );
@@ -847,6 +894,71 @@ export async function runBeforeToolCallHook(args: {
         loopScope,
       );
     }
+  }
+
+  // External-content canary gate: scan exec-/bash-/write-shaped tool argv for
+  // bodies the gateway flagged as untrusted (see
+  // src/security/external-content.ts → recordExternalContentBody).
+  // A match means the model is forwarding attacker-controlled content into a
+  // dangerous tool — force operator approval before dispatch.
+  if (isExternalContentGatedToolName(toolName)) {
+    const triggeredCanaries = scanArgvForExternalContent(params);
+    if (triggeredCanaries.length > 0) {
+      log.warn(
+        `external-content canary gate: tool=${toolName} matched=${triggeredCanaries.length} forcing operator approval`,
+      );
+      if (args.approvalMode === "report") {
+        return {
+          blocked: true,
+          kind: "failure",
+          deniedReason: "plugin-approval",
+          reason: "External-untrusted content detected in argv — operator approval required.",
+          params,
+        };
+      }
+      return await requestPluginToolApproval({
+        approval: buildCanaryApprovalRequest(toolName, triggeredCanaries),
+        toolName,
+        toolCallId: args.toolCallId,
+        ctx: args.ctx,
+        signal: args.signal,
+        baseParams: params,
+        triggeredCanaries,
+      });
+    }
+  }
+
+  // B.1 — controller judge (asymmetric trust split). Default OFF behind
+  // OPENCLAW_SECURITY_CONTROLLER_JUDGE=on. When enabled, every tool call is
+  // reviewed by a separate Haiku-class LLM that never saw the adversarial
+  // prompt — it judges {toolName, argv} in isolation against a constrained
+  // JSON schema. Rejection blocks dispatch with an audit-chain entry tagged
+  // by the synthetic toolName prefix "controller_rejected:" so log readers
+  // can grep for them.
+  const controllerVerdict = await evaluateToolCall({
+    toolName,
+    argv: params,
+    correlationId: args.toolCallId,
+  });
+  if (!controllerVerdict.approved) {
+    tryAppendAuditEntry({
+      entryId: randomUUID(),
+      toolName: `controller_rejected:${toolName}`,
+      argv: params,
+    });
+    log.warn(`[controller-judge] dispatch blocked: tool=${toolName} reason=<redacted>`, {
+      event: "controller_judge.dispatch_blocked",
+      tool_name: toolName,
+      reason: controllerVerdict.reason,
+      tool_call_id: args.toolCallId,
+    });
+    return {
+      blocked: true,
+      kind: "veto",
+      deniedReason: "controller-rejection",
+      reason: controllerVerdict.reason,
+      params,
+    };
   }
 
   const hookRunner = getGlobalHookRunner();

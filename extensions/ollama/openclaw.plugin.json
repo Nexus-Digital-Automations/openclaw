@@ -4,7 +4,10 @@
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["ollama", "ollama-cloud"],
+  "providers": [
+    "ollama",
+    "ollama-cloud"
+  ],
   "providerCatalogEntry": "./provider-discovery.ts",
   "providerRequest": {
     "providers": {
@@ -26,17 +29,25 @@
       }
     }
   },
-  "syntheticAuthRefs": ["ollama"],
-  "nonSecretAuthMarkers": ["ollama-local"],
+  "syntheticAuthRefs": [
+    "ollama"
+  ],
+  "nonSecretAuthMarkers": [
+    "ollama-local"
+  ],
   "setup": {
     "providers": [
       {
         "id": "ollama",
-        "envVars": ["OLLAMA_API_KEY"]
+        "envVars": [
+          "OLLAMA_API_KEY"
+        ]
       },
       {
         "id": "ollama-cloud",
-        "envVars": ["OLLAMA_API_KEY"]
+        "envVars": [
+          "OLLAMA_API_KEY"
+        ]
       }
     ]
   },
@@ -76,7 +87,9 @@
             "id": "kimi-k2.5:cloud",
             "name": "kimi-k2.5:cloud",
             "reasoning": true,
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "cost": {
               "input": 0,
               "output": 0,
@@ -94,7 +107,9 @@
             "id": "minimax-m2.7:cloud",
             "name": "minimax-m2.7:cloud",
             "reasoning": true,
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "cost": {
               "input": 0,
               "output": 0,
@@ -112,7 +127,9 @@
             "id": "glm-5.1:cloud",
             "name": "glm-5.1:cloud",
             "reasoning": true,
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "cost": {
               "input": 0,
               "output": 0,
@@ -134,8 +151,12 @@
     }
   },
   "contracts": {
-    "memoryEmbeddingProviders": ["ollama"],
-    "webSearchProviders": ["ollama"]
+    "memoryEmbeddingProviders": [
+      "ollama"
+    ],
+    "webSearchProviders": [
+      "ollama"
+    ]
   },
   "configSchema": {
     "type": "object",
@@ -145,7 +166,9 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "enabled": { "type": "boolean" }
+          "enabled": {
+            "type": "boolean"
+          }
         }
       }
     }
@@ -159,5 +182,11 @@
       "label": "Enable Discovery",
       "help": "When false, OpenClaw keeps the Ollama plugin available but skips implicit startup discovery of ambient local or remote Ollama models."
     }
+  },
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "ollama"
+    ]
   }
 }

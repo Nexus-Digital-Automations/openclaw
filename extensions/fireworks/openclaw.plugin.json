@@ -4,12 +4,16 @@
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["fireworks"],
+  "providers": [
+    "fireworks"
+  ],
   "setup": {
     "providers": [
       {
         "id": "fireworks",
-        "envVars": ["FIREWORKS_API_KEY"]
+        "envVars": [
+          "FIREWORKS_API_KEY"
+        ]
       }
     ]
   },
@@ -37,7 +41,10 @@
           {
             "id": "accounts/fireworks/models/kimi-k2p6",
             "name": "Kimi K2.6",
-            "input": ["text", "image"],
+            "input": [
+              "text",
+              "image"
+            ],
             "contextWindow": 262144,
             "maxTokens": 262144,
             "cost": {
@@ -50,11 +57,16 @@
           {
             "id": "accounts/fireworks/routers/kimi-k2p5-turbo",
             "name": "Kimi K2.5 Turbo (Fire Pass)",
-            "input": ["text", "image"],
+            "input": [
+              "text",
+              "image"
+            ],
             "contextWindow": 256000,
             "maxTokens": 256000,
             "compat": {
-              "unsupportedToolSchemaKeywords": ["not"]
+              "unsupportedToolSchemaKeywords": [
+                "not"
+              ]
             },
             "cost": {
               "input": 0,
@@ -74,5 +86,11 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {}
+  },
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "fireworks"
+    ]
   }
 }

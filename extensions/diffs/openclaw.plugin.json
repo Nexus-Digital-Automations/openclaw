@@ -1,19 +1,28 @@
 {
   "id": "diffs",
+  "capabilities": {
+    "hooks": [
+      "before_prompt_build"
+    ]
+  },
   "activation": {
     "onStartup": true
   },
   "name": "Diffs",
   "description": "OpenClaw read-only diff viewer plugin and file renderer for agents.",
   "contracts": {
-    "tools": ["diffs"]
+    "tools": [
+      "diffs"
+    ]
   },
   "toolMetadata": {
     "diffs": {
       "optional": true
     }
   },
-  "skills": ["./skills"],
+  "skills": [
+    "./skills"
+  ],
   "uiHints": {
     "viewerBaseUrl": {
       "label": "Viewer Base URL",
@@ -118,7 +127,10 @@
           },
           "layout": {
             "type": "string",
-            "enum": ["unified", "split"],
+            "enum": [
+              "unified",
+              "split"
+            ],
             "default": "unified"
           },
           "showLineNumbers": {
@@ -127,7 +139,11 @@
           },
           "diffIndicators": {
             "type": "string",
-            "enum": ["bars", "classic", "none"],
+            "enum": [
+              "bars",
+              "classic",
+              "none"
+            ],
             "default": "bars"
           },
           "wordWrap": {
@@ -140,22 +156,35 @@
           },
           "theme": {
             "type": "string",
-            "enum": ["light", "dark"],
+            "enum": [
+              "light",
+              "dark"
+            ],
             "default": "dark"
           },
           "fileFormat": {
             "type": "string",
-            "enum": ["png", "pdf"],
+            "enum": [
+              "png",
+              "pdf"
+            ],
             "default": "png"
           },
           "format": {
             "type": "string",
             "description": "Deprecated alias for fileFormat.",
-            "enum": ["png", "pdf"]
+            "enum": [
+              "png",
+              "pdf"
+            ]
           },
           "fileQuality": {
             "type": "string",
-            "enum": ["standard", "hq", "print"],
+            "enum": [
+              "standard",
+              "hq",
+              "print"
+            ],
             "default": "standard"
           },
           "fileScale": {
@@ -171,12 +200,19 @@
           "imageFormat": {
             "type": "string",
             "description": "Deprecated alias for fileFormat.",
-            "enum": ["png", "pdf"]
+            "enum": [
+              "png",
+              "pdf"
+            ]
           },
           "imageQuality": {
             "type": "string",
             "description": "Deprecated alias for fileQuality.",
-            "enum": ["standard", "hq", "print"]
+            "enum": [
+              "standard",
+              "hq",
+              "print"
+            ]
           },
           "imageScale": {
             "type": "number",
@@ -192,7 +228,12 @@
           },
           "mode": {
             "type": "string",
-            "enum": ["view", "image", "file", "both"],
+            "enum": [
+              "view",
+              "image",
+              "file",
+              "both"
+            ],
             "default": "both"
           },
           "ttlSeconds": {

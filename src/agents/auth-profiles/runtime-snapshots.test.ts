@@ -1,7 +1,13 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { CREDENTIAL_RESIDENCY_IDLE_TTL_MS, log } from "./constants.js";
+import {
+  getCredentialResidencyEvictionCount,
+  resetCredentialResidencyEvictionCountForTests,
+} from "./residency-eviction.js";
 import {
   clearRuntimeAuthProfileStoreSnapshots,
   getRuntimeAuthProfileStoreSnapshot,
+  hasRuntimeAuthProfileStoreSnapshot,
   replaceRuntimeAuthProfileStoreSnapshots,
   setRuntimeAuthProfileStoreSnapshot,
 } from "./runtime-snapshots.js";
@@ -86,5 +92,76 @@ describe("runtime auth profile snapshots", () => {
       structuredCloneSpy.mockRestore();
       clearRuntimeAuthProfileStoreSnapshots();
     }
+  });
+});
+
+describe("runtime auth profile snapshot residency eviction", () => {
+  const agentDir = "/tmp/openclaw-auth-runtime-residency-agent";
+
+  afterEach(() => {
+    vi.useRealTimers();
+    clearRuntimeAuthProfileStoreSnapshots();
+    resetCredentialResidencyEvictionCountForTests();
+    vi.restoreAllMocks();
+  });
+
+  it("evicts an idle snapshot once untouched past the residency window", () => {
+    vi.useFakeTimers();
+    setRuntimeAuthProfileStoreSnapshot(createStore("access-1"), agentDir);
+
+    vi.advanceTimersByTime(CREDENTIAL_RESIDENCY_IDLE_TTL_MS);
+
+    expect(getRuntimeAuthProfileStoreSnapshot(agentDir)).toBeUndefined();
+    expect(hasRuntimeAuthProfileStoreSnapshot(agentDir)).toBe(false);
+    expect(getCredentialResidencyEvictionCount()).toBe(1);
+  });
+
+  it("keeps an actively-read snapshot resident (idle clock, not age)", () => {
+    vi.useFakeTimers();
+    setRuntimeAuthProfileStoreSnapshot(createStore("access-1"), agentDir);
+
+    // Two reads each inside the idle window, but their sum exceeds it: an
+    // age-based bound would have evicted; the idle bound must not.
+    vi.advanceTimersByTime(CREDENTIAL_RESIDENCY_IDLE_TTL_MS * 0.6);
+    expectOpenAICodexSnapshotCredential(getRuntimeAuthProfileStoreSnapshot(agentDir), {
+      access: "access-1",
+    });
+    vi.advanceTimersByTime(CREDENTIAL_RESIDENCY_IDLE_TTL_MS * 0.6);
+
+    expectOpenAICodexSnapshotCredential(getRuntimeAuthProfileStoreSnapshot(agentDir), {
+      access: "access-1",
+    });
+    expect(getCredentialResidencyEvictionCount()).toBe(0);
+  });
+
+  it("leaves an already-returned clone intact when the entry later evicts", () => {
+    vi.useFakeTimers();
+    setRuntimeAuthProfileStoreSnapshot(createStore("access-1"), agentDir);
+
+    const handed = getRuntimeAuthProfileStoreSnapshot(agentDir);
+    expectOpenAICodexSnapshotCredential(handed, { access: "access-1" });
+
+    vi.advanceTimersByTime(CREDENTIAL_RESIDENCY_IDLE_TTL_MS);
+    expect(getRuntimeAuthProfileStoreSnapshot(agentDir)).toBeUndefined();
+
+    // The clone handed out earlier is decoupled from the evicted Map entry.
+    expectOpenAICodexSnapshotCredential(handed, { access: "access-1" });
+  });
+
+  it("never logs credential values in the eviction event", () => {
+    vi.useFakeTimers();
+    const infoSpy = vi.spyOn(log, "info");
+    setRuntimeAuthProfileStoreSnapshot(createStore("access-1"), agentDir);
+
+    vi.advanceTimersByTime(CREDENTIAL_RESIDENCY_IDLE_TTL_MS);
+    expect(getRuntimeAuthProfileStoreSnapshot(agentDir)).toBeUndefined();
+
+    const evictionCalls = infoSpy.mock.calls.filter(
+      ([message]) => message === "credential.residency.evicted",
+    );
+    expect(evictionCalls).toHaveLength(1);
+    const serialized = JSON.stringify(evictionCalls[0]);
+    expect(serialized).not.toContain("access-1");
+    expect(serialized).not.toContain("refresh-access-1");
   });
 });

@@ -156,6 +156,7 @@ import { resolveModelAsync } from "./model.js";
 import { sanitizeSessionHistory, validateReplayTurns } from "./replay-history.js";
 import { createEmbeddedAgentResourceLoader } from "./resource-loader.js";
 import { resolveAttemptSpawnWorkspaceDir } from "./run/attempt.thread-helpers.js";
+import { getPriorRunCorrelationId } from "./run-state.js";
 import { buildEmbeddedSandboxInfo, resolveEmbeddedSandboxInfoExecPolicy } from "./sandbox-info.js";
 import { prewarmSessionFile, trackSessionManagerAccess } from "./session-manager-cache.js";
 import {
@@ -1387,8 +1388,16 @@ async function compactEmbeddedAgentSessionDirectOnce(
                   hardenedBoundary.firstKeptEntryId ?? effectiveFirstKeptEntryId;
                 postCompactionLeafId = hardenedBoundary.leafId ?? postCompactionLeafId;
                 session.agent.state.messages = hardenedBoundary.messages;
+                // D.7b — same prior-correlation lookup as the
+                // rotation path in compact.queued.ts; the manual-trigger
+                // boundary re-reads the transcript and must apply the
+                // purifier when the prior turn touched untrusted content.
+                const priorCorrelationId = getPriorRunCorrelationId(params.sessionId);
                 transcriptRotationSessionManager = await readTranscriptFileState(
                   params.sessionFile,
+                  priorCorrelationId
+                    ? { priorCorrelationId, sessionId: params.sessionId }
+                    : undefined,
                 );
               }
             } catch (err) {

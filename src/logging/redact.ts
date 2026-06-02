@@ -1,5 +1,7 @@
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { compileConfigRegex } from "../security/config-regex.js";
+import { snapshotResolvedSecrets } from "../shared/process-secret-literals.js";
+import { escapeRegExp } from "../shared/regexp.js";
 import { readLoggingConfig } from "./config.js";
 import { replacePatternBounded } from "./redact-bounded.js";
 
@@ -270,14 +272,84 @@ export function redactSensitiveText(text: string, options?: RedactOptions): stri
   if (normalizeMode(resolvedOptions.mode) === "off") {
     return text;
   }
-  if (!resolvedOptions.patterns?.length && !couldMatchDefaultRedactPatterns(text)) {
+  // Process-wide literals capture custom-format secrets the regex defaults miss.
+  // Merging them here means every log sink benefits without per-call wiring.
+  const literalPatterns = compileLiteralPatterns(snapshotResolvedSecrets());
+  // Fast path: skip the resolve + scan only when there are no custom patterns,
+  // no resolved literal secrets, and the text can't match any default pattern.
+  // The literal-patterns check keeps the optimization from skipping a known
+  // secret the regex defaults wouldn't catch.
+  if (
+    !resolvedOptions.patterns?.length &&
+    !literalPatterns.length &&
+    !couldMatchDefaultRedactPatterns(text)
+  ) {
     return text;
   }
   const resolved = resolveRedactOptions(resolvedOptions);
-  if (!resolved.patterns.length) {
+  if (!resolved.patterns.length && !literalPatterns.length) {
     return text;
   }
-  return redactText(text, resolved.patterns);
+  return redactText(text, [...literalPatterns, ...resolved.patterns]);
+}
+
+// Compiles literals into escaped global regex patterns so they merge with the
+// regex-based defaults in redactSensitiveText. Empty entries and obviously
+// non-secret tokens (length < 4) are dropped because masking them would alias
+// common substrings like "true" or short paths across unrelated text.
+function compileLiteralPatterns(literals: Iterable<string>): RegExp[] {
+  const seen = new Set<string>();
+  const patterns: RegExp[] = [];
+  for (const literal of literals) {
+    if (typeof literal !== "string" || literal.length < 4 || seen.has(literal)) {
+      continue;
+    }
+    seen.add(literal);
+    patterns.push(new RegExp(escapeRegExp(literal), "g"));
+  }
+  return patterns;
+}
+
+// Use when the caller holds a SecretRefResolveCache from src/secrets/resolve.ts
+// whose `resolvedValues` set captured exact byte strings the system decrypted
+// during this request. Closes the gap where a custom-format token would slip
+// through the regex defaults.
+export function redactSensitiveTextWithLiterals(
+  text: string,
+  literals: Iterable<string>,
+  options?: RedactOptions,
+): string {
+  if (!text) {
+    return text;
+  }
+  const resolved = resolveRedactOptions(options);
+  if (resolved.mode === "off") {
+    return text;
+  }
+  const literalPatterns = compileLiteralPatterns(literals);
+  if (!resolved.patterns.length && !literalPatterns.length) {
+    return text;
+  }
+  return redactText(text, [...literalPatterns, ...resolved.patterns]);
+}
+
+// Structured variant of redactSecrets that also masks per-session literals.
+// Mirrors the recursion contract of redactStructuredSecretValue so nested
+// objects, arrays, and field-sensitive strings all get the same treatment.
+export function redactSecretsWithLiterals<T>(value: T, literals: Iterable<string>): T {
+  const literalPatterns = compileLiteralPatterns(literals);
+  const baseOptions = resolveToolPayloadRedaction();
+  const mergedOptions: RedactOptions = {
+    mode: baseOptions.mode,
+    patterns: [...literalPatterns, ...resolvePatterns(baseOptions.patterns)],
+  };
+  if (typeof value === "string") {
+    return redactSensitiveText(value, mergedOptions) as T;
+  }
+  if (value === null || value === undefined || typeof value !== "object") {
+    return value;
+  }
+  return redactStructuredSecretValue("", value, new WeakSet<object>(), mergedOptions) as T;
 }
 
 export function redactToolDetail(detail: string): string {
@@ -417,9 +489,10 @@ function redactStructuredSecretValue(
 }
 
 export function redactSecrets<T>(value: T): T {
-  const options = resolveToolPayloadRedaction();
+  const baseOptions = resolveToolPayloadRedaction();
   if (typeof value === "string") {
-    return redactSensitiveText(value, options) as T;
+    // redactSensitiveText already merges snapshotResolvedSecrets() literals.
+    return redactSensitiveText(value, baseOptions) as T;
   }
   if (value === null || value === undefined) {
     return value;
@@ -427,7 +500,18 @@ export function redactSecrets<T>(value: T): T {
   if (typeof value !== "object") {
     return value;
   }
-  return redactStructuredSecretValue("", value, new WeakSet<object>(), options) as T;
+  // Structured path bypasses redactSensitiveText's per-call registry merge, so
+  // splice the process-wide secret literals into options.patterns here. Without
+  // this, a custom-format token embedded in a tool-output field would survive
+  // the regex-only sweep and reach the model.
+  const literalPatterns = compileLiteralPatterns(snapshotResolvedSecrets());
+  const mergedOptions: RedactOptions = literalPatterns.length
+    ? {
+        mode: baseOptions.mode,
+        patterns: [...literalPatterns, ...resolvePatterns(baseOptions.patterns)],
+      }
+    : baseOptions;
+  return redactStructuredSecretValue("", value, new WeakSet<object>(), mergedOptions) as T;
 }
 
 export function getDefaultRedactPatterns(): string[] {

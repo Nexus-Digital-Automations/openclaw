@@ -1,5 +1,8 @@
 {
   "id": "qa-lab",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": false
   },

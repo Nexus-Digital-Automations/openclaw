@@ -1,5 +1,12 @@
 export type MemorySource = "memory" | "sessions";
 
+// C.1 (1.E) — memory taint origin. Snippets ingested from untrusted-zone
+// paths (per workspace-zones classifier) are tagged `untrusted` so the
+// prompt-section builder can wrap them in external-content markers on
+// retrieval. Pre-migration rows and trusted-zone ingest both default to
+// `trusted`, so behaviour is unchanged for legacy data.
+export type MemoryOrigin = "trusted" | "untrusted";
+
 export type MemorySearchResult = {
   path: string;
   startLine: number;
@@ -9,6 +16,7 @@ export type MemorySearchResult = {
   textScore?: number;
   snippet: string;
   source: MemorySource;
+  origin?: MemoryOrigin;
   citation?: string;
 };
 
@@ -82,6 +90,11 @@ export type MemoryProviderStatus = {
   custom?: Record<string, unknown>;
 };
 
+export type MemoryReclassifyResult = {
+  total: number;
+  updated: number;
+};
+
 export interface MemorySearchManager {
   search(
     query: string,
@@ -102,6 +115,12 @@ export interface MemorySearchManager {
     sessionFiles?: string[];
     progress?: (update: MemorySyncProgressUpdate) => void;
   }): Promise<void>;
+  // Re-runs workspace-zones classification over every chunks row and updates
+  // origin_source where the resolved zone differs. Idempotent — a second run
+  // produces zero updates. Used by `openclaw memory reclassify` to backfill
+  // origin on databases indexed before C.1, or after the operator changes
+  // their untrusted-zone configuration.
+  reclassify?(): Promise<MemoryReclassifyResult>;
   getCachedEmbeddingAvailability?(): MemoryEmbeddingProbeResult | null;
   probeEmbeddingAvailability(): Promise<MemoryEmbeddingProbeResult>;
   probeVectorStoreAvailability?(): Promise<boolean>;

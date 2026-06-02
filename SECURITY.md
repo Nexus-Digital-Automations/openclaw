@@ -1,5 +1,70 @@
 # Security Policy
 
+> **Fork policy override (Nexus-Digital-Automations).** This fork ships an
+> extended security architecture per `specs/security-blueprint-full.md`. The
+> stance below differs from upstream in one major dimension: **prompt
+> injection is in-scope as a vulnerability class** in this fork, not just a
+> hardening surface. The upstream threat-model text further down is preserved
+> for diff-ability; where the two conflict, this fork-policy block wins.
+>
+> **Fork-shipped structural defenses (vs. upstream baseline):**
+>
+> 1. **Verified-cmd envelopes** (`src/security/verified-cmd.ts`) — every
+>    minted tool call carries a hash-chained nonce. Dispatch refuses any
+>    envelope that doesn't chain to the turn's expected `prevHash`.
+> 2. **Output firewall** (`src/security/output-firewall.ts`) — streaming
+>    Aho-Corasick scanner over `{resolvedSecrets, externalContentCanaries,
+externalContentMarkerBodies, mintedEnvelopeNonces}`. Trip aborts the
+>    stream before any tool dispatch.
+> 3. **External-content wrap + canary** (`src/security/external-content.ts`)
+>    — every untrusted byte flowing into the prompt gets framed with a
+>    per-wrap canary; the canary is registered with the firewall.
+> 4. **HITL gate on external-content argv** (`src/agents/pi-tools.before-tool-call.ts`)
+>    — model-emitted tool calls whose argv carries an external-content body
+>    require operator approval, even for normally-auto-allowed tools.
+> 5. **Plugin signing + signed `skills.lock`** (`src/security/plugin-signing.ts`)
+>    — Ed25519 signature verification at install time; per-plugin file-hash
+>    lockfile.
+> 6. **Workspace zone classifier** (`src/agents/workspace-zones.ts`) —
+>    trusted/untrusted-zone paths drive auto-wrapping of read tool output
+>    and skill-resolver refusal.
+> 7. **Audit-chain** (`src/security/audit-chain.ts`) — hash-chained
+>    NDJSON audit log of every tool dispatch + dispatch refusal.
+> 8. **Internal-judge controller** (`src/security/controller-judge.ts`,
+>    `src/agents/internal-judge.ts`) — second-LLM controller that judges
+>    every tool call in isolation against a JSON-schema-constrained
+>    response. **Default ON, fail-closed**: judge unavailability blocks
+>    dispatch with `judge_unavailable:<reason>`. Operators who need the
+>    Haiku-class latency back (~150–300ms p50 per tool call) or want soft
+>    degradation on outage can opt out:
+>    - `OPENCLAW_SECURITY_CONTROLLER_JUDGE=off` disables the controller
+>      entirely. Accepted opt-out tokens: `off`, `false`, `0`, `no`
+>      (case-insensitive). **Weakens defense-in-depth: the only structural
+>      defense against semantic exfil via a clean adversarial tool call.**
+>    - `OPENCLAW_SECURITY_CONTROLLER_JUDGE_FAIL_CLOSED=off` (same opt-out
+>      tokens) restores fail-open: judge errors degrade to approved with a
+>      structured warn log. Appropriate for dev environments / CI smoke
+>      tests where availability matters more than defense.
+>
+> **Triage rubric for prompt-injection reports in this fork:**
+>
+> | Severity          | Conditions                                                                                                                                                                                                                                       |
+> | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+> | **CVE-class**     | Reproducible bypass of _all four_ of: external-content wrap, output firewall, HITL gate, and verified-cmd envelope chain. Or: a single byte-level bypass of the firewall (Aho-Corasick correctness) that exfiltrates a registered taint literal. |
+> | **Hardening PR**  | Bypass of one or two layers but not the full stack; novel injection class the existing primitives demonstrably suppress; novel attack on the controller-judge prompt.                                                                            |
+> | **Documentation** | Injection chains that the shipped controls already neutralize end-to-end; injection without any tool-dispatch consequence; theoretical chains absent evidence.                                                                                   |
+>
+> The forensic trail for any incident is the audit-chain
+> (`logs/audit-chain.ndjson`) plus the structured-log
+> `controller_judge.dispatch_blocked` events. Reports should cite specific
+> chain entries when possible.
+>
+> Report fork-specific prompt-injection findings to the fork maintainer
+> (this repo), not upstream. Upstream's policy below applies for everything
+> _outside_ prompt injection.
+
+---
+
 If you believe you've found a security issue in OpenClaw, report it privately first.
 
 This policy does two things: it gives researchers a clear disclosure path, and it spells out the trust model maintainers use when triaging reports. OpenClaw is local-first agent infrastructure for trusted operators; it is not designed as a shared multi-tenant boundary between adversarial users on one gateway.

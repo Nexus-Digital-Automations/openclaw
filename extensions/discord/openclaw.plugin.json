@@ -5,16 +5,29 @@
   "activation": {
     "onStartup": false
   },
-  "channels": ["discord"],
+  "channels": [
+    "discord"
+  ],
   "contracts": {
-    "transcriptSourceProviders": ["discord-voice"]
+    "transcriptSourceProviders": [
+      "discord-voice"
+    ]
   },
   "channelEnvVars": {
-    "discord": ["DISCORD_BOT_TOKEN"]
+    "discord": [
+      "DISCORD_BOT_TOKEN"
+    ]
   },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
     "properties": {}
+  },
+  "capabilities": {
+    "hooks": [
+      "subagent_delivery_target",
+      "subagent_ended",
+      "subagent_spawning"
+    ]
   }
 }

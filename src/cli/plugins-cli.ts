@@ -61,6 +61,12 @@ const loadPluginsAuthoringCommands = createModuleLoader(
   () => import("./plugins-authoring-command.js"),
 );
 
+// commander coerces repeatable --root flags through this accumulator so each
+// occurrence appends to the prior list rather than overwriting it.
+function collectRepeatable(value: string, previous: string[]): string[] {
+  return [...previous, value];
+}
+
 export function registerPluginsCli(program: Command) {
   const plugins = program
     .command("plugins")
@@ -206,6 +212,123 @@ export function registerPluginsCli(program: Command) {
     .action(async () => {
       const { runPluginsDoctorCommand } = await loadPluginsRuntime();
       await runPluginsDoctorCommand();
+    });
+
+  plugins
+    .command("lock")
+    .description("Hash installed plugins and write skills.lock for integrity verification")
+    .option("--json", "Print JSON")
+    .option("--file <path>", "Override lockfile path")
+    .action(async (opts: { json?: boolean; file?: string }) => {
+      const { runPluginsLockCommand } = await import("./plugins-integrity-command.js");
+      await runPluginsLockCommand({
+        json: opts.json,
+        ...(opts.file ? { filePath: opts.file } : {}),
+      });
+    });
+
+  plugins
+    .command("verify")
+    .description("Verify installed plugins match skills.lock; exits non-zero on drift")
+    .option("--json", "Print JSON")
+    .option("--file <path>", "Override lockfile path")
+    .action(async (opts: { json?: boolean; file?: string }) => {
+      const { runPluginsVerifyCommand } = await import("./plugins-integrity-command.js");
+      await runPluginsVerifyCommand({
+        json: opts.json,
+        ...(opts.file ? { filePath: opts.file } : {}),
+      });
+    });
+
+  plugins
+    .command("source-lock")
+    .description(
+      "Hash plugin SOURCE trees (extensions/ + external --root paths) and write plugins.lock",
+    )
+    .option("--json", "Print JSON")
+    .option("--file <path>", "Override plugins.lock path")
+    .option("--root <path>", "Explicit plugin source root (repeatable)", collectRepeatable, [])
+    .option("--dry-run", "Print the would-be lockfile to stdout without writing", false)
+    .action(async (opts: { json?: boolean; file?: string; root?: string[]; dryRun?: boolean }) => {
+      const { runPluginsSourceLockCommand } = await import("./plugins-source-integrity-command.js");
+      await runPluginsSourceLockCommand({
+        json: opts.json,
+        dryRun: opts.dryRun,
+        ...(opts.file ? { filePath: opts.file } : {}),
+        ...(opts.root && opts.root.length > 0 ? { roots: opts.root } : {}),
+      });
+    });
+
+  plugins
+    .command("source-verify")
+    .description("Verify plugin SOURCE trees match plugins.lock; exits non-zero on drift")
+    .option("--json", "Print JSON")
+    .option("--file <path>", "Override plugins.lock path")
+    .option("--root <path>", "Explicit plugin source root (repeatable)", collectRepeatable, [])
+    .action(async (opts: { json?: boolean; file?: string; root?: string[] }) => {
+      const { runPluginsSourceVerifyCommand } =
+        await import("./plugins-source-integrity-command.js");
+      await runPluginsSourceVerifyCommand({
+        json: opts.json,
+        ...(opts.file ? { filePath: opts.file } : {}),
+        ...(opts.root && opts.root.length > 0 ? { roots: opts.root } : {}),
+      });
+    });
+
+  plugins
+    .command("sign")
+    .description("Sign a plugin source tree, writing an openclaw.plugin.sig sidecar")
+    .argument("<plugin-dir>", "Plugin source directory")
+    .requiredOption("--key <path>", "Path to the Ed25519 PRIVATE KEY PEM file")
+    .option("--json", "Print JSON")
+    .action(async (pluginDir: string, opts: { key: string; json?: boolean }) => {
+      const { runPluginsSignCommand } = await import("./plugins-sign-command.js");
+      await runPluginsSignCommand({ pluginDir, keyPath: opts.key, json: opts.json });
+    });
+
+  plugins
+    .command("trust")
+    .description("Add a publisher fingerprint to the known-publishers registry")
+    .requiredOption("--fingerprint <fp>", "32-char hex fingerprint")
+    .requiredOption("--public-key <hex>", "Full hex of the publisher SPKI public key")
+    .option("--file <path>", "Override known-publishers.json path")
+    .option("--json", "Print JSON")
+    .action((opts: { fingerprint: string; publicKey: string; file?: string; json?: boolean }) => {
+      void import("./plugins-sign-command.js").then(({ runPluginsTrustCommand }) =>
+        runPluginsTrustCommand({
+          fingerprint: opts.fingerprint,
+          publicKeyHex: opts.publicKey,
+          ...(opts.file ? { filePath: opts.file } : {}),
+          json: opts.json,
+        }),
+      );
+    });
+
+  plugins
+    .command("generate-key")
+    .description("Generate an Ed25519 keypair for plugin signing")
+    .requiredOption("--out <path>", "Output directory for private.pem and public.pem")
+    .option("--json", "Print JSON")
+    .action((opts: { out: string; json?: boolean }) => {
+      void import("./plugins-sign-command.js").then(({ runPluginsGenerateKeyCommand }) =>
+        runPluginsGenerateKeyCommand({ outDir: opts.out, json: opts.json }),
+      );
+    });
+
+  plugins
+    .command("revoke")
+    .description("Revoke a publisher fingerprint (refused at install even if first-party/trusted)")
+    .requiredOption("--fingerprint <fp>", "32-char hex fingerprint")
+    .option("--file <path>", "Override revoked-publishers.json path")
+    .option("--json", "Print JSON")
+    .action((opts: { fingerprint: string; file?: string; json?: boolean }) => {
+      void import("./plugins-sign-command.js").then(({ runPluginsRevokeCommand }) =>
+        runPluginsRevokeCommand({
+          fingerprint: opts.fingerprint,
+          ...(opts.file ? { filePath: opts.file } : {}),
+          json: opts.json,
+        }),
+      );
     });
 
   plugins

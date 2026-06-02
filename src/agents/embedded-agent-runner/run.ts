@@ -20,6 +20,11 @@ import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
 import { resolveProviderAuthProfileId } from "../../plugins/provider-runtime.js";
 import { enqueueCommandInLane } from "../../process/command-queue.js";
 import type { CommandQueueEnqueueOptions } from "../../process/command-queue.types.js";
+import { markCorrelationTainted } from "../../security/context-taint-store.js";
+import {
+  didCorrelationTouchExternalContent,
+  setExternalContentTouchScope,
+} from "../../shared/process-external-content-bodies.js";
 import { createAgentHarnessTaskRuntimeScope } from "../../tasks/agent-harness-task-runtime-scope.js";
 import { resolveUserPath } from "../../utils.js";
 import { isMarkdownCapableMessageChannel } from "../../utils/message-channel.js";
@@ -123,6 +128,7 @@ import {
   type PostCompactionGuardObservation,
 } from "./post-compaction-loop-guard.js";
 import { createEmbeddedRunReplayState, observeReplayMetadata } from "./replay-state.js";
+import { setPriorRunCorrelationId } from "./run-state.js";
 import { handleAssistantFailover } from "./run/assistant-failover.js";
 import {
   createEmbeddedRunStageTracker,
@@ -470,6 +476,11 @@ export async function runEmbeddedAgent(
   if (effectiveSessionKey !== params.sessionKey) {
     params = { ...params, sessionKey: effectiveSessionKey };
   }
+  // D.5 — scope external-content recordings to this turn's correlationId so
+  // D.6 can ask "did this turn touch untrusted content" at turn-end. Cleared
+  // in the matching finally block; the disk taint store at
+  // logs/context-taint.ndjson is the cross-restart channel D.6 writes.
+  setExternalContentTouchScope(params.runId);
   const sessionLane = resolveSessionLane(params.sessionKey?.trim() || params.sessionId);
   const globalLane = resolveGlobalLane(params.lane);
   const sessionQueuePriority = resolveEmbeddedRunSessionQueuePriority(params.trigger);
@@ -3598,6 +3609,29 @@ export async function runEmbeddedAgent(
           };
         }
       } finally {
+        // D.6 — close out the taint scope opened in D.5. If this turn touched
+        // untrusted content, persist the verdict to the cross-restart taint
+        // store and record the correlationId as the session's "previous turn"
+        // so the next turn's consumers (D.7) can query it.
+        if (params.runId) {
+          const touched = didCorrelationTouchExternalContent(params.runId);
+          setExternalContentTouchScope(undefined);
+          if (touched) {
+            try {
+              await markCorrelationTainted(params.runId);
+            } catch (taintErr) {
+              log.warn?.("[security] failed to persist tainted correlationId", {
+                runId: params.runId,
+                errorMessage: formatErrorMessage(taintErr),
+              });
+            }
+          }
+          if (params.sessionId) {
+            setPriorRunCorrelationId(params.sessionId, params.runId);
+          }
+        } else {
+          setExternalContentTouchScope(undefined);
+        }
         forgetPromptBuildDrainCacheForRun(params.runId);
         stopRuntimeAuthRefreshTimer();
         await runAgentCleanupStep({

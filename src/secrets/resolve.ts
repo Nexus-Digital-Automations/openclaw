@@ -19,6 +19,8 @@ import {
 } from "../plugins/manifest-registry.js";
 import { inspectPathPermissions, safeStat } from "../security/audit-fs.js";
 import { isPathInside } from "../security/scan-paths.js";
+import { recordSessionSecret } from "../security/session-secret-isolation.js";
+import { recordResolvedSecret } from "../shared/process-secret-literals.js";
 import { resolveUserPath } from "../utils.js";
 import { runTasksWithConcurrency } from "../utils/run-with-concurrency.js";
 import { readJsonPointer } from "./json-pointer.js";
@@ -58,6 +60,11 @@ type ResolveSecretRefOptions = {
   env?: NodeJS.ProcessEnv;
   cache?: SecretRefResolveCache;
   manifestRegistry?: Pick<PluginManifestRegistry, "plugins">;
+  // G.3 — when present, the resolved secret bytes are tagged with this
+  // session id so cross-session reads can be refused. Absent at startup-time
+  // and audit-time resolution where no session is in scope; that path keeps
+  // the process-global registry as the sole owner.
+  sessionId?: string;
 };
 
 type ResolutionLimits = {
@@ -954,7 +961,28 @@ export async function resolveSecretRefValues(
           message: `Secret provider "${result.group.providerName}" did not return id "${ref.id}".`,
         });
       }
-      resolved.set(secretRefKey(ref), result.values.get(ref.id));
+      const value = result.values.get(ref.id);
+      resolved.set(secretRefKey(ref), value);
+      // Pattern-based redaction in src/logging/redact.ts can miss custom-format
+      // tokens. Recording the exact resolved bytes lets the cache owner pass
+      // these literals into redactSensitiveTextWithLiterals so the system masks
+      // values it itself decrypted, even when no regex matches.
+      if (typeof value === "string" && value.length > 0) {
+        if (options.cache?.resolvedValues) {
+          options.cache.resolvedValues.add(value);
+        }
+        // Also publish to the process-wide registry so log sinks that do not
+        // own a SecretRefResolveCache (transcript writer, gateway logger,
+        // approval-channel formatter) still mask the decrypted bytes.
+        recordResolvedSecret(value);
+        // G.3 — tag the resolved bytes to the requesting session so
+        // refuseCrossSessionRead can refuse later cross-session lookups.
+        // Startup / audit / CLI paths pass no sessionId; that's fine — the
+        // process-global registry above already covers them.
+        if (options.sessionId) {
+          recordSessionSecret(options.sessionId, value);
+        }
+      }
     }
   }
   return resolved;

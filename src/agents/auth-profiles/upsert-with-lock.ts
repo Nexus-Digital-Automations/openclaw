@@ -26,16 +26,44 @@ function normalizeAuthProfileCredential(credential: AuthProfileCredential): Auth
   return credential;
 }
 
+// G.3 — stamp ownerSessionId onto an OAuth credential when sessionId is set
+// AND the credential does not yet carry one. Existing stamps are preserved
+// (matches the refresh-merge preservation contract in oauth.ts so the original
+// owning session is never silently rewritten by a later upsert).
+function stampOwnerSessionIfMissing(
+  credential: AuthProfileCredential,
+  sessionId: string | undefined,
+): AuthProfileCredential {
+  if (!sessionId) {
+    return credential;
+  }
+  if (credential.type !== "oauth") {
+    return credential;
+  }
+  if (credential.ownerSessionId) {
+    return credential;
+  }
+  return { ...credential, ownerSessionId: sessionId };
+}
+
 export async function upsertAuthProfileWithLock(params: {
   profileId: string;
   credential: AuthProfileCredential;
   agentDir?: string;
+  // G.3 — when set, stamps ownerSessionId on a freshly-constructed OAuth
+  // credential so future cross-session refresh attempts can be refused.
+  // Bootstrap callers (CLI migrate, external-cli sync) pass undefined per
+  // grandfather policy; login / onboarding wizards thread the active session.
+  sessionId?: string;
 }): Promise<AuthProfileStore | null> {
   const authPath = resolveAuthStorePath(params.agentDir);
   ensureAuthStoreFile(authPath);
 
   try {
-    const credential = normalizeAuthProfileCredential(params.credential);
+    const credential = stampOwnerSessionIfMissing(
+      normalizeAuthProfileCredential(params.credential),
+      params.sessionId,
+    );
     return await updateAuthProfileStoreWithLock({
       agentDir: params.agentDir,
       saveOptions: {

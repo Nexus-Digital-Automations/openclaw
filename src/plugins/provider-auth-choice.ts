@@ -601,6 +601,13 @@ export async function applyAuthChoicePluginProvider(
 }
 
 async function upsertAuthProfileWithLockOrThrow(params: UpsertAuthProfileParams): Promise<void> {
+  // G.3 grandfather: provider-auth-choice flows run from CLI onboarding /
+  // doctor / models-auth wizards where there is no WebSocket session in
+  // scope. Pass-through (no sessionId) leaves ownerSessionId unset so the
+  // refresh gate treats this credential as unrestricted, matching the
+  // pre-G.3 behavior for everything created via these flows. Gateway-driven
+  // login flows that DO have a session would call upsertAuthProfileWithLock
+  // directly with sessionId set.
   const updated = await upsertAuthProfileWithLock(params);
   if (!updated) {
     throw new Error(

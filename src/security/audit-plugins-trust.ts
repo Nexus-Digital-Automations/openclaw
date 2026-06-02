@@ -466,13 +466,20 @@ export async function collectPluginsTrustFindings(params: {
       )
       .map(([pluginId]) => pluginId);
     if (missingIntegrity.length > 0) {
+      // Drift in install integrity is normal in a fresh workspace, but once a
+      // skills.lock exists the operator has explicitly committed to a hash set
+      // — silent re-installs without lock refresh become a tampering signal.
+      const hardened = await skillsLockPresent(params.stateDir);
       findings.push({
         checkId: "plugins.installs_missing_integrity",
-        severity: "warn",
-        title: "Plugin index is missing integrity metadata",
+        severity: hardened ? "critical" : "warn",
+        title: hardened
+          ? "Plugin index is missing integrity metadata under active skills.lock"
+          : "Plugin index is missing integrity metadata",
         detail: `Plugin index records missing integrity:\n${missingIntegrity.map((entry) => `- ${entry}`).join("\n")}`,
-        remediation:
-          "Reinstall or update plugins to refresh install metadata with resolved integrity hashes.",
+        remediation: hardened
+          ? "Run `openclaw plugins verify`; if expected, re-run `openclaw plugins lock` to refresh the recorded hashes."
+          : "Reinstall or update plugins to refresh install metadata with resolved integrity hashes.",
       });
     }
 
@@ -566,4 +573,13 @@ export async function collectPluginsTrustFindings(params: {
   }
 
   return findings;
+}
+
+async function skillsLockPresent(stateDir: string): Promise<boolean> {
+  try {
+    await fs.stat(path.join(stateDir, "plugins", "skills.lock"));
+    return true;
+  } catch {
+    return false;
+  }
 }

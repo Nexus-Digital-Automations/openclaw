@@ -4,6 +4,18 @@ import { calculateCost } from "../llm/model-utils.js";
 import type { AnthropicOptions } from "../llm/providers/anthropic.js";
 import type { Context, Model, SimpleStreamOptions, ThinkingLevel } from "../llm/types.js";
 import { parseStreamingJson } from "../llm/utils/json-parse.js";
+import { createSubsystemLogger } from "../logging/subsystem.js";
+import {
+  createOutputFirewall,
+  recordEnvelopeNonce,
+  snapshotFirewallInputs,
+} from "../security/output-firewall.js";
+import {
+  GENESIS_PREV_HASH,
+  envelopeHash,
+  mintEnvelope,
+  type VerifiedCmdEnvelope,
+} from "../security/verified-cmd.js";
 import { MALFORMED_STREAMING_FRAGMENT_ERROR_MESSAGE } from "../shared/assistant-error-format.js";
 import {
   applyAnthropicPayloadPolicyToParams,
@@ -11,6 +23,7 @@ import {
 } from "./anthropic-payload-policy.js";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./copilot-dynamic-headers.js";
 import { parseJsonObjectPreservingUnsafeIntegers } from "./json-unsafe-integers.js";
+import { createOutputFirewallState, scanOutputChunk } from "./output-firewall.js";
 import { resolveProviderEndpoint } from "./provider-attribution.js";
 import { buildGuardedModelFetch } from "./provider-transport-fetch.js";
 import type { StreamFn } from "./runtime/index.js";
@@ -25,6 +38,8 @@ import {
   sanitizeNonEmptyTransportPayloadText,
   sanitizeTransportPayloadText,
 } from "./transport-stream-shared.js";
+
+const log = createSubsystemLogger("anthropic-transport");
 
 const CLAUDE_CODE_VERSION = "2.1.75";
 const CLAUDE_CODE_TOOLS = [
@@ -89,6 +104,10 @@ type TransportContentBlock =
       arguments: unknown;
       partialJson?: string;
       index?: number;
+      // P1.1 verified-cmd envelope minted at extraction time. Dispatch refuses
+      // tool calls whose envelope does not chain-verify; absence is also a
+      // refusal. Turn-scoped, non-persisted, never exposed to the model.
+      verifiedCmd?: VerifiedCmdEnvelope;
     };
 
 type MutableAssistantOutput = {
@@ -981,6 +1000,54 @@ export function createAnthropicMessagesTransportStreamFn(): StreamFn {
         const reasoningContentTextBlocks = new Map<number, number>();
         const eventIndexKey = (eventIndex: unknown) =>
           typeof eventIndex === "number" ? eventIndex : -1;
+        let firewallState = createOutputFirewallState();
+        // Turn-level AC firewall: distinct from the per-delta sanitizer above.
+        // The sanitizer rewrites sensitive bytes in transit; this gate trips
+        // the whole turn so no tool call is dispatched once a leak is seen.
+        const turnFirewall = createOutputFirewall(snapshotFirewallInputs());
+        let firewallTripped = false;
+        // P1.1 verified-cmd chain head. Tracks the SHA-256 of the last
+        // envelope minted in this turn so each subsequent envelope's prevHash
+        // links to it. Reset per turn (this closure is per-stream).
+        let verifiedCmdChainHead = GENESIS_PREV_HASH;
+        const tripFirewall = (
+          family: string,
+          literalLength: number,
+          offset: number,
+          source: "text" | "thinking",
+        ): void => {
+          firewallTripped = true;
+          output.stopReason = "error";
+          log.warn(`[output-firewall] turn aborted: ${source} chunk echoed sensitive literal`, {
+            event: "output_firewall.trip",
+            family,
+            literal: "<redacted>",
+            literal_length: literalLength,
+            offset,
+          });
+        };
+        const scanForTurnTrip = (chunk: string, source: "text" | "thinking"): void => {
+          if (firewallTripped || chunk.length === 0) {
+            return;
+          }
+          const trip = turnFirewall.scan(chunk);
+          if (trip !== null) {
+            tripFirewall(trip.family, trip.literal.length, trip.offset, source);
+          }
+        };
+        const firewallTextDelta = (raw: string): string => {
+          scanForTurnTrip(raw, "text");
+          const verdict = scanOutputChunk(raw, firewallState);
+          firewallState = verdict.nextState;
+          if (verdict.kind !== "block") {
+            return raw;
+          }
+          log.warn(
+            `[output-firewall] blocked Anthropic text delta with sensitive literal match=${verdict.matched.length}b`,
+            { event: "output_firewall.block" },
+          );
+          return verdict.sanitized;
+        };
         const appendReasoningContentThinkingDelta = (
           eventIndex: unknown,
           rawText: unknown,
@@ -1047,11 +1114,12 @@ export function createAnthropicMessagesTransportStreamFn(): StreamFn {
               partial: output as never,
             });
           }
-          block.text += text;
+          const safeText = firewallTextDelta(text);
+          block.text += safeText;
           stream.push({
             type: "text_delta",
             contentIndex,
-            delta: text,
+            delta: safeText,
             partial: output as never,
           });
           return true;
@@ -1117,10 +1185,11 @@ export function createAnthropicMessagesTransportStreamFn(): StreamFn {
             const contentBlock = event.content_block as Record<string, unknown> | undefined;
             const index = typeof event.index === "number" ? event.index : -1;
             if (contentBlock?.type === "text") {
-              const text =
+              const rawText =
                 typeof contentBlock.text === "string"
                   ? sanitizeTransportPayloadText(contentBlock.text)
                   : "";
+              const text = rawText.length > 0 ? firewallTextDelta(rawText) : rawText;
               const block: TransportContentBlock = { type: "text", text, index };
               output.content.push(block);
               const contentIndex = output.content.length - 1;
@@ -1183,6 +1252,18 @@ export function createAnthropicMessagesTransportStreamFn(): StreamFn {
               continue;
             }
             if (contentBlock?.type === "tool_use") {
+              // Firewall trip means a sensitive literal was already echoed in
+              // this turn's text; suppress tool dispatch so the tool path
+              // cannot act on the leaked context. The turn ends with
+              // stopReason="error" and no toolcall_{start,delta,end} events.
+              if (firewallTripped) {
+                log.warn("[output-firewall] suppressing Anthropic tool_use after firewall trip", {
+                  event: "output_firewall.tool_suppressed",
+                  tool_name:
+                    typeof contentBlock.name === "string" ? contentBlock.name : "<unknown>",
+                });
+                continue;
+              }
               const block: TransportContentBlock = {
                 type: "toolCall",
                 id: typeof contentBlock.id === "string" ? contentBlock.id : "",
@@ -1231,11 +1312,12 @@ export function createAnthropicMessagesTransportStreamFn(): StreamFn {
                 const text = sanitizeTransportPayloadText(delta.content);
                 if (text.length > 0) {
                   if (block?.type === "text") {
-                    block.text += text;
+                    const safeText = firewallTextDelta(text);
+                    block.text += safeText;
                     stream.push({
                       type: "text_delta",
                       contentIndex: index,
-                      delta: text,
+                      delta: safeText,
                       partial: output as never,
                     });
                     appendedContent = true;
@@ -1264,11 +1346,12 @@ export function createAnthropicMessagesTransportStreamFn(): StreamFn {
               delta?.type === "text_delta" &&
               typeof delta.text === "string"
             ) {
-              block.text += delta.text;
+              const safeText = firewallTextDelta(delta.text);
+              block.text += safeText;
               stream.push({
                 type: "text_delta",
                 contentIndex: index,
-                delta: delta.text,
+                delta: safeText,
                 partial: output as never,
               });
               continue;
@@ -1350,6 +1433,16 @@ export function createAnthropicMessagesTransportStreamFn(): StreamFn {
                 block.arguments = parseAnthropicToolCallArguments(block.partialJson);
               }
               delete block.partialJson;
+              // P1.1: mint envelope once args are finalized. Chain head moves
+              // forward only on successful mint, preserving turn order.
+              const envelope = mintEnvelope(
+                { name: block.name, args: block.arguments },
+                "model",
+                verifiedCmdChainHead,
+              );
+              block.verifiedCmd = envelope;
+              verifiedCmdChainHead = envelopeHash(envelope);
+              recordEnvelopeNonce(envelope.nonce);
               stream.push({
                 type: "toolcall_end",
                 contentIndex: index,

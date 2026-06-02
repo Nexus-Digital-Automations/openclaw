@@ -1,9 +1,14 @@
 {
   "id": "signal",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": false
   },
-  "channels": ["signal"],
+  "channels": [
+    "signal"
+  ],
   "configSchema": {
     "type": "object",
     "additionalProperties": false,

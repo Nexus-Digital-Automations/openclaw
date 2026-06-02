@@ -1,5 +1,8 @@
 {
   "id": "searxng",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": false
   },
@@ -18,7 +21,9 @@
     }
   },
   "contracts": {
-    "webSearchProviders": ["searxng"]
+    "webSearchProviders": [
+      "searxng"
+    ]
   },
   "configSchema": {
     "type": "object",
@@ -29,7 +34,10 @@
         "additionalProperties": false,
         "properties": {
           "baseUrl": {
-            "type": ["string", "object"]
+            "type": [
+              "string",
+              "object"
+            ]
           },
           "categories": {
             "type": "string"

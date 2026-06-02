@@ -5,6 +5,7 @@ import {
   type SessionEntry as StoredSessionEntry,
 } from "../config/sessions.js";
 import { diagnosticLogger as diag } from "../logging/diagnostic.js";
+import { maybePurifySessionEntries } from "../security/maybe-purify-session-entries.js";
 import {
   buildSessionContext,
   migrateSessionEntries,
@@ -103,6 +104,13 @@ export async function readBtwTranscriptMessages(params: {
   sessionFile: string;
   sessionId: string;
   snapshotLeafId?: string | null;
+  // D.3 — when set, the purifyParsedTranscriptEntries gate consults the
+  // taint store + in-process touch signal for this correlation id; on
+  // touch, the purifier rewrites entry content before buildSessionContext
+  // turns entries into next-turn prompt messages. Callers without
+  // prior-turn correlation context omit this and skip purification
+  // (matches the existing behavior pre-D.3).
+  priorCorrelationId?: string;
 }): Promise<unknown[]> {
   try {
     const entries = parseSessionEntries(await readFile(params.sessionFile, "utf-8"));
@@ -110,24 +118,34 @@ export async function readBtwTranscriptMessages(params: {
     const sessionEntries = entries.filter(
       (entry): entry is AgentSessionEntry => entry.type !== "session",
     );
-    if (!hasParentLinkedEntries(sessionEntries)) {
-      return buildSessionContext(sessionEntries).messages;
+    const purifiedSessionEntries = await maybePurifySessionEntries(
+      sessionEntries,
+      params.priorCorrelationId,
+      params.sessionId,
+    );
+    if (!hasParentLinkedEntries(purifiedSessionEntries)) {
+      return buildSessionContext(purifiedSessionEntries).messages;
     }
 
     let branchEntries = params.snapshotLeafId
-      ? buildSessionBranchEntries(sessionEntries, params.snapshotLeafId)
+      ? buildSessionBranchEntries(purifiedSessionEntries, params.snapshotLeafId)
       : undefined;
     if (params.snapshotLeafId && !branchEntries) {
       diag.debug(
         `btw snapshot leaf unavailable: sessionId=${params.sessionId} leaf=${params.snapshotLeafId}`,
       );
     }
-    branchEntries ??= buildSessionBranchEntries(sessionEntries, readDefaultLeafId(sessionEntries));
+    branchEntries ??= buildSessionBranchEntries(
+      purifiedSessionEntries,
+      readDefaultLeafId(purifiedSessionEntries),
+    );
     if (!params.snapshotLeafId && isTrailingUserMessage(branchEntries?.at(-1))) {
       const parentId = readSessionEntryParentId(branchEntries!.at(-1)!);
-      branchEntries = parentId ? (buildSessionBranchEntries(sessionEntries, parentId) ?? []) : [];
+      branchEntries = parentId
+        ? (buildSessionBranchEntries(purifiedSessionEntries, parentId) ?? [])
+        : [];
     }
-    const sessionContext = buildSessionContext(branchEntries ?? sessionEntries);
+    const sessionContext = buildSessionContext(branchEntries ?? purifiedSessionEntries);
     return Array.isArray(sessionContext.messages) ? sessionContext.messages : [];
   } catch {
     return [];

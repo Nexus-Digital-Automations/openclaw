@@ -152,4 +152,41 @@ describe("security audit workspace skill path escape findings", () => {
       realpathSpy.mockRestore();
     }
   });
+
+  it.skipIf(isWindows)(
+    "flags a skill whose realpath resolves into the untrusted zone as critical",
+    async () => {
+      const tmp = await tempCases.makeTmpDir("workspace-skill-untrusted-zone");
+      const fakeHome = path.join(tmp, "home");
+      const workspaceDir = path.join(fakeHome, "workspace");
+      const untrustedRoot = path.join(fakeHome, ".openclaw", "untrusted");
+      const untrustedSkillPath = path.join(untrustedRoot, "skill", "SKILL.md");
+      await fs.mkdir(path.join(workspaceDir, "skills", "leak"), { recursive: true });
+      await fs.mkdir(path.dirname(untrustedSkillPath), { recursive: true });
+      await fs.writeFile(untrustedSkillPath, "# untrusted body\n", "utf-8");
+      await fs.symlink(untrustedSkillPath, path.join(workspaceDir, "skills", "leak", "SKILL.md"));
+
+      const originalHome = process.env.HOME;
+      // macOS tmpdir is a symlink (/tmp → /private/tmp); use realpath so
+      // HOME and skillRealPath share the same prefix after symlink resolution.
+      process.env.HOME = await fs.realpath(fakeHome);
+      try {
+        const findings = await collectWorkspaceSkillSymlinkEscapeFindings({
+          cfg: { agents: { defaults: { workspace: workspaceDir } } } satisfies OpenClawConfig,
+        });
+        const finding = requireFinding(findings, "skills.zone.untrusted_resolution");
+        expect(finding.severity).toBe("critical");
+        expect(finding.detail).toContain(untrustedSkillPath);
+        expect(findings.map((entry) => entry.checkId)).not.toContain(
+          "skills.workspace.symlink_escape",
+        );
+      } finally {
+        if (originalHome === undefined) {
+          delete process.env.HOME;
+        } else {
+          process.env.HOME = originalHome;
+        }
+      }
+    },
+  );
 });

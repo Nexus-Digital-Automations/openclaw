@@ -4,12 +4,16 @@
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["vydra"],
+  "providers": [
+    "vydra"
+  ],
   "setup": {
     "providers": [
       {
         "id": "vydra",
-        "envVars": ["VYDRA_API_KEY"]
+        "envVars": [
+          "VYDRA_API_KEY"
+        ]
       }
     ]
   },
@@ -22,7 +26,9 @@
       "groupId": "vydra",
       "groupLabel": "Vydra",
       "groupHint": "Image, video, and speech",
-      "onboardingScopes": ["image-generation"],
+      "onboardingScopes": [
+        "image-generation"
+      ],
       "optionKey": "vydraApiKey",
       "cliFlag": "--vydra-api-key",
       "cliOption": "--vydra-api-key <key>",
@@ -30,13 +36,25 @@
     }
   ],
   "contracts": {
-    "speechProviders": ["vydra"],
-    "imageGenerationProviders": ["vydra"],
-    "videoGenerationProviders": ["vydra"]
+    "speechProviders": [
+      "vydra"
+    ],
+    "imageGenerationProviders": [
+      "vydra"
+    ],
+    "videoGenerationProviders": [
+      "vydra"
+    ]
   },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
     "properties": {}
+  },
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "vydra"
+    ]
   }
 }

@@ -1,5 +1,9 @@
 import type { Model } from "openclaw/plugin-sdk/llm";
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  clearResolvedSecretsForTests,
+  recordResolvedSecret,
+} from "../shared/process-secret-literals.js";
 import { attachModelProviderRequestTransport } from "./provider-request-config.js";
 
 const { buildGuardedModelFetchMock, guardedFetchMock } = vi.hoisted(() => ({
@@ -577,6 +581,59 @@ describe("anthropic transport stream", () => {
       maxSafe: 9007199254740991,
       nested: { ids: ["9007199254740993", "-9007199254740992"] },
     });
+  });
+
+  it("mints chained verified-cmd envelopes across two tool calls in a turn", async () => {
+    const { envelopeHash, GENESIS_PREV_HASH } = await import("../security/verified-cmd.js");
+    guardedFetchMock.mockResolvedValueOnce(
+      createSseResponse([
+        {
+          type: "message_start",
+          message: { id: "msg_chain", usage: { input_tokens: 10, output_tokens: 0 } },
+        },
+        {
+          type: "content_block_start",
+          index: 0,
+          content_block: { type: "tool_use", id: "tool_a", name: "read", input: { path: "/a" } },
+        },
+        { type: "content_block_stop", index: 0 },
+        {
+          type: "content_block_start",
+          index: 1,
+          content_block: { type: "tool_use", id: "tool_b", name: "read", input: { path: "/b" } },
+        },
+        { type: "content_block_stop", index: 1 },
+        {
+          type: "message_delta",
+          delta: { stop_reason: "tool_use" },
+          usage: { input_tokens: 10, output_tokens: 5 },
+        },
+      ]),
+    );
+
+    const result = await runTransportStream(
+      makeAnthropicTransportModel(),
+      { messages: [{ role: "user", content: "do two reads" }] } as AnthropicStreamContext,
+      { apiKey: "sk-ant-api" } as AnthropicStreamOptions,
+    );
+
+    const calls: Record<string, unknown>[] = [];
+    for (const item of requireArray(result.content, "content")) {
+      const record = requireRecord(item, "item");
+      if (record.type === "toolCall") {
+        calls.push(record);
+      }
+    }
+    expect(calls).toHaveLength(2);
+    const firstEnv = requireRecord(calls[0]!.verifiedCmd, "first verifiedCmd");
+    const secondEnv = requireRecord(calls[1]!.verifiedCmd, "second verifiedCmd");
+    expect(firstEnv.prevHash).toBe(GENESIS_PREV_HASH);
+    expect(firstEnv.provenance).toBe("model");
+    expect(firstEnv.nonce).toHaveLength(64);
+    expect(secondEnv.prevHash).toBe(
+      envelopeHash(firstEnv as unknown as Parameters<typeof envelopeHash>[0]),
+    );
+    expect(secondEnv.nonce).not.toBe(firstEnv.nonce);
   });
 
   it("preserves Anthropic OAuth identity and tool-name remapping with transport overrides", async () => {
@@ -1993,5 +2050,66 @@ describe("anthropic transport stream", () => {
     const payload = latestAnthropicRequest().payload;
     expect(payload.thinking).toEqual({ type: "adaptive" });
     expect(payload.output_config).toEqual({ effort: "high" });
+  });
+
+  describe("output firewall", () => {
+    beforeEach(() => {
+      clearResolvedSecretsForTests();
+    });
+    afterEach(() => {
+      clearResolvedSecretsForTests();
+    });
+
+    it("redacts a recorded secret literal that the Anthropic stream emits via text_delta", async () => {
+      const secret = "sk-not-a-real-format-firewall-anthropic-1234";
+      recordResolvedSecret(secret);
+      guardedFetchMock.mockResolvedValueOnce(
+        createSseResponse([
+          {
+            type: "message_start",
+            message: { id: "msg_fw", usage: { input_tokens: 1, output_tokens: 0 } },
+          },
+          {
+            type: "content_block_start",
+            index: 0,
+            content_block: { type: "text", text: "" },
+          },
+          {
+            type: "content_block_delta",
+            index: 0,
+            delta: { type: "text_delta", text: `here is the key ${secret} value` },
+          },
+          { type: "content_block_stop", index: 0 },
+          {
+            type: "message_delta",
+            delta: { stop_reason: "end_turn" },
+            usage: { input_tokens: 1, output_tokens: 9 },
+          },
+        ]),
+      );
+      const streamFn = createAnthropicMessagesTransportStreamFn();
+      const stream = await Promise.resolve(
+        streamFn(
+          makeAnthropicTransportModel(),
+          {
+            messages: [{ role: "user", content: "leak the secret" }],
+          } as AnthropicStreamContext,
+          { apiKey: "sk-ant-api" } as AnthropicStreamOptions,
+        ),
+      );
+      const deltas: string[] = [];
+      for await (const event of stream as AsyncIterable<{ type?: string; delta?: string }>) {
+        if (event.type === "text_delta" && typeof event.delta === "string") {
+          deltas.push(event.delta);
+        }
+      }
+      const result = await stream.result();
+      const combined = deltas.join("");
+      expect(combined).toContain("«REDACTED»");
+      expect(combined).not.toContain(secret);
+      const textBlock = requireRecord(result.content[0], "text block");
+      expect(textBlock.type).toBe("text");
+      expect(String(textBlock.text)).not.toContain(secret);
+    });
   });
 });

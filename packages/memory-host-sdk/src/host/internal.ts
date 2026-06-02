@@ -54,6 +54,9 @@ export type MemoryChunk = {
   text: string;
   hash: string;
   embeddingInput?: EmbeddingInput;
+  // C.1 (1.E) — taint origin. Optional so legacy writers stay valid; absent
+  // values are treated as 'trusted' by the retrieval-time wrap (Track C.3).
+  origin?: "trusted" | "untrusted";
 };
 
 export type MultimodalMemoryChunk = {

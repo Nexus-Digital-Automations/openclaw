@@ -5,13 +5,17 @@
   },
   "enabledByDefault": true,
   "contracts": {
-    "memoryEmbeddingProviders": ["voyage"]
+    "memoryEmbeddingProviders": [
+      "voyage"
+    ]
   },
   "setup": {
     "providers": [
       {
         "id": "voyage",
-        "envVars": ["VOYAGE_API_KEY"]
+        "envVars": [
+          "VOYAGE_API_KEY"
+        ]
       }
     ]
   },
@@ -19,5 +23,8 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {}
+  },
+  "capabilities": {
+    "hooks": []
   }
 }

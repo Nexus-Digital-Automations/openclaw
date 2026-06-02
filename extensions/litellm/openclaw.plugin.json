@@ -4,12 +4,16 @@
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["litellm"],
+  "providers": [
+    "litellm"
+  ],
   "setup": {
     "providers": [
       {
         "id": "litellm",
-        "envVars": ["LITELLM_API_KEY"]
+        "envVars": [
+          "LITELLM_API_KEY"
+        ]
       }
     ]
   },
@@ -30,11 +34,19 @@
     }
   ],
   "contracts": {
-    "imageGenerationProviders": ["litellm"]
+    "imageGenerationProviders": [
+      "litellm"
+    ]
   },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
     "properties": {}
+  },
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "litellm"
+    ]
   }
 }

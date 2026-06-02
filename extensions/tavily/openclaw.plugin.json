@@ -3,12 +3,16 @@
   "activation": {
     "onStartup": false
   },
-  "skills": ["./skills"],
+  "skills": [
+    "./skills"
+  ],
   "setup": {
     "providers": [
       {
         "id": "tavily",
-        "envVars": ["TAVILY_API_KEY"]
+        "envVars": [
+          "TAVILY_API_KEY"
+        ]
       }
     ]
   },
@@ -25,11 +29,18 @@
     }
   },
   "contracts": {
-    "webSearchProviders": ["tavily"],
-    "tools": ["tavily_search", "tavily_extract"]
+    "webSearchProviders": [
+      "tavily"
+    ],
+    "tools": [
+      "tavily_search",
+      "tavily_extract"
+    ]
   },
   "configContracts": {
-    "compatibilityRuntimePaths": ["tools.web.search.apiKey"]
+    "compatibilityRuntimePaths": [
+      "tools.web.search.apiKey"
+    ]
   },
   "configSchema": {
     "type": "object",
@@ -40,7 +51,10 @@
         "additionalProperties": false,
         "properties": {
           "apiKey": {
-            "type": ["string", "object"]
+            "type": [
+              "string",
+              "object"
+            ]
           },
           "baseUrl": {
             "type": "string"
@@ -48,5 +62,8 @@
         }
       }
     }
+  },
+  "capabilities": {
+    "hooks": []
   }
 }

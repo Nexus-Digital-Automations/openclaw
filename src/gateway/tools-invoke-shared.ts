@@ -13,6 +13,18 @@ import { logWarn } from "../logger.js";
 import { isTestDefaultMemorySlotDisabled } from "../plugins/config-state.js";
 import { defaultSlotIdForKey } from "../plugins/slots.js";
 import { getPluginToolMeta } from "../plugins/tools.js";
+import { tryAppendAuditEntry } from "../security/audit-chain.js";
+import { createToolOutputRedactor } from "../security/tool-output-redactor.js";
+import {
+  computeTurnSalt,
+  currentSessionTurnCounter,
+  parseToolNameSalt,
+} from "../security/tool-name-salt.js";
+import {
+  envelopeHash,
+  verifyEnvelope,
+  type VerifiedCmdEnvelope,
+} from "../security/verified-cmd.js";
 import { canonicalizeSessionKeyForAgent } from "./session-store-key.js";
 import { resolveGatewayScopedTools } from "./tool-resolution.js";
 
@@ -27,9 +39,18 @@ export type ToolsInvokeInput = {
   agentId?: unknown;
   idempotencyKey?: unknown;
   dryRun?: unknown;
+  // P1.1 verified-cmd envelope minted at extract time by the transport-stream.
+  // When `verifiedCmd.expectedPrevHash` is set on the dispatch call, the
+  // envelope is required and must chain-verify.
+  verifiedCmd?: VerifiedCmdEnvelope;
 };
 
-type ToolsInvokeErrorType = "invalid_request" | "not_found" | "tool_call_blocked" | "tool_error";
+type ToolsInvokeErrorType =
+  | "invalid_request"
+  | "not_found"
+  | "tool_call_blocked"
+  | "tool_error"
+  | "verified_cmd_failure";
 
 type ToolsInvokeOutcome =
   | {
@@ -38,6 +59,9 @@ type ToolsInvokeOutcome =
       toolName: string;
       source: "core" | "plugin" | "channel";
       result: unknown;
+      // P1.1: hash of the dispatched envelope. Callers chain the next call's
+      // prevHash to this value. Only set when verified-cmd was enforced.
+      verifiedCmdHash?: string;
     }
   | {
       ok: false;
@@ -46,6 +70,9 @@ type ToolsInvokeOutcome =
       error: {
         type: ToolsInvokeErrorType;
         message: string;
+        // P1.1 fine-grained error code (e.g. "verified_cmd.missing_nonce",
+        // "verified_cmd.chain_break"). Present only for verified-cmd refusals.
+        code?: string;
         requiresApproval?: boolean;
       };
     };
@@ -133,6 +160,19 @@ function resolveToolInputErrorStatus(err: unknown): number | null {
   return name === "ToolAuthorizationError" ? 403 : 400;
 }
 
+// Redactor must never block a tool result from reaching the model: a crash in
+// the AC scanner degrades to passthrough + logged event, symmetric to the
+// best-effort audit-write posture in `tryAppendAuditEntry`.
+function redactToolOutputSafely(result: unknown): unknown {
+  try {
+    const redactor = createToolOutputRedactor();
+    return redactor.redact(result);
+  } catch (err) {
+    logWarn(`tool_output_redactor.error: ${String(err)}`);
+    return result;
+  }
+}
+
 function resolveToolSource(tool: AnyAgentTool): "core" | "plugin" | "channel" {
   if (getPluginToolMeta(tool)) {
     return "plugin";
@@ -141,6 +181,35 @@ function resolveToolSource(tool: AnyAgentTool): "core" | "plugin" | "channel" {
     return "channel";
   }
   return "core";
+}
+
+const TOOL_NAME_SALT_DELIMITER = "__cz_";
+
+/**
+ * Reverse the schema-fuzz salt suffix on an on-the-wire tool name.
+ *
+ * - Name without the delimiter passes through unchanged (legacy callers,
+ *   current production state where the forward map is not yet activated).
+ * - Name with the delimiter and a matching session salt returns the
+ *   original tool name.
+ * - Name with the delimiter but mismatched salt returns `null` so the
+ *   caller surfaces a structured refusal. Silently looking up the
+ *   unsalted name would defeat the defense.
+ */
+function resolveSaltedToolName(rawToolName: string, sessionKeyInput: unknown): string | null {
+  if (!rawToolName.includes(TOOL_NAME_SALT_DELIMITER)) {
+    return rawToolName;
+  }
+  const sessionKey = normalizeOptionalString(sessionKeyInput);
+  if (!sessionKey) {
+    return null;
+  }
+  const turnCounter = currentSessionTurnCounter(sessionKey);
+  if (turnCounter <= 0) {
+    return null;
+  }
+  const expectedSalt = computeTurnSalt(sessionKey, turnCounter);
+  return parseToolNameSalt(rawToolName, expectedSalt);
 }
 
 export async function invokeGatewayTool(params: {
@@ -153,15 +222,68 @@ export async function invokeGatewayTool(params: {
   senderIsOwner?: boolean;
   toolCallIdPrefix: string;
   approvalMode?: "request" | "report";
+  // P1.1: when set, the caller is in verified-cmd mode. Envelope MUST be
+  // present on `input.verifiedCmd` and chain to this previous-hash; absence
+  // or break refuses the call. Backward-compatible: unset = legacy path.
+  expectedPrevHash?: string;
 }): Promise<ToolsInvokeOutcome> {
-  const toolName = normalizeOptionalString(params.input.name ?? params.input.tool) ?? "";
-  if (!toolName) {
+  const rawToolName = normalizeOptionalString(params.input.name ?? params.input.tool) ?? "";
+  if (!rawToolName) {
     return {
       ok: false,
       status: 400,
       toolName: "",
       error: { type: "invalid_request", message: "tools.invoke requires name" },
     };
+  }
+  // A.2 — reverse-map schema-fuzz salt. If the on-the-wire tool name carries
+  // the salt delimiter, attempt to parse against the current session's salt.
+  // Mismatch (delimiter present, salt wrong) is an injection-shaped refusal,
+  // NOT a silent fallback. Names without the delimiter pass through verbatim
+  // so unsalted callers (current production state) keep working.
+  const toolName = resolveSaltedToolName(rawToolName, params.input.sessionKey);
+  if (toolName === null) {
+    logWarn(
+      `[tool-name-salt] refusing tool dispatch: salted-name mismatch tool=${rawToolName}`,
+    );
+    return {
+      ok: false,
+      status: 400,
+      toolName: rawToolName,
+      error: {
+        type: "invalid_request",
+        message: "Tool name carries schema-fuzz salt that does not match this session's turn salt.",
+        code: "tool_name_salt.mismatch",
+      },
+    };
+  }
+
+  let verifiedCmdHash: string | undefined;
+  if (params.expectedPrevHash !== undefined) {
+    const verdict = verifyEnvelope(params.input.verifiedCmd, params.expectedPrevHash);
+    if (!verdict.ok) {
+      const code =
+        verdict.reason === "envelope_missing"
+          ? "verified_cmd.missing_nonce"
+          : verdict.reason === "chain_break"
+            ? "verified_cmd.chain_break"
+            : "verified_cmd.shape_invalid";
+      logWarn(
+        `[verified-cmd] refusing tool dispatch: ${verdict.reason}` +
+          ` tool=${toolName} code=${code}`,
+      );
+      return {
+        ok: false,
+        status: 403,
+        toolName,
+        error: {
+          type: "verified_cmd_failure",
+          message: `verified-cmd refused: ${verdict.reason}`,
+          code,
+        },
+      };
+    }
+    verifiedCmdHash = envelopeHash(params.input.verifiedCmd as VerifiedCmdEnvelope);
   }
 
   if (process.env.VITEST && MEMORY_TOOL_NAMES.has(toolName)) {
@@ -269,12 +391,19 @@ export async function invokeGatewayTool(params: {
         },
       };
     }
+    const executionResult = await gatewayTool.execute?.(toolCallId, hookResult.params);
+    tryAppendAuditEntry({
+      entryId: toolCallId,
+      toolName,
+      argv: hookResult.params,
+    });
     return {
       ok: true,
       status: 200,
       toolName,
       source: resolveToolSource(gatewayTool),
-      result: await gatewayTool.execute?.(toolCallId, hookResult.params),
+      result: redactToolOutputSafely(executionResult),
+      verifiedCmdHash,
     };
   } catch (err) {
     const inputStatus = resolveToolInputErrorStatus(err);

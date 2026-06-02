@@ -8,11 +8,13 @@
  * validation, fetch, and structured response formatting.
  */
 
+import { pluginFetch } from "openclaw/plugin-sdk/http-guard-runtime";
 import { formatErrorMessage } from "../utils/format.js";
 import { debugLog, debugError } from "../utils/log.js";
 
 const API_BASE = "https://api.sgroup.qq.com";
 const DEFAULT_TIMEOUT_MS = 30000;
+const QQBOT_PLUGIN_ID = "qqbot";
 
 /**
  * Channel API call parameters.
@@ -175,7 +177,7 @@ export async function executeChannelApi(
 
     let res: Response;
     try {
-      res = await fetch(url, fetchOptions);
+      res = await pluginFetch({ pluginId: QQBOT_PLUGIN_ID, input: url, init: fetchOptions });
     } catch (err) {
       clearTimeout(timeoutId);
       if (err instanceof Error && err.name === "AbortError") {

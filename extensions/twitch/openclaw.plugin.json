@@ -5,13 +5,20 @@
   "activation": {
     "onStartup": false
   },
-  "channels": ["twitch"],
+  "channels": [
+    "twitch"
+  ],
   "channelEnvVars": {
-    "twitch": ["OPENCLAW_TWITCH_ACCESS_TOKEN"]
+    "twitch": [
+      "OPENCLAW_TWITCH_ACCESS_TOKEN"
+    ]
   },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
     "properties": {}
+  },
+  "capabilities": {
+    "hooks": []
   }
 }

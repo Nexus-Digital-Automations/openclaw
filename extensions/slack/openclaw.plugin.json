@@ -5,7 +5,9 @@
   "activation": {
     "onStartup": false
   },
-  "channels": ["slack"],
+  "channels": [
+    "slack"
+  ],
   "channelConfigs": {
     "slack": {
       "label": "Slack",
@@ -17,11 +19,18 @@
     }
   },
   "channelEnvVars": {
-    "slack": ["SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "SLACK_USER_TOKEN"]
+    "slack": [
+      "SLACK_BOT_TOKEN",
+      "SLACK_APP_TOKEN",
+      "SLACK_USER_TOKEN"
+    ]
   },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
     "properties": {}
+  },
+  "capabilities": {
+    "hooks": []
   }
 }

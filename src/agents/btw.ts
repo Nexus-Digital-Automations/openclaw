@@ -21,6 +21,7 @@ import { resolveSessionAuthProfileOverride } from "./auth-profiles/session-overr
 import { readBtwTranscriptMessages, resolveBtwSessionTranscriptPath } from "./btw-transcript.js";
 import { EmbeddedBlockChunker, type BlockReplyChunking } from "./embedded-agent-block-chunker.js";
 import { resolveModelWithRegistry } from "./embedded-agent-runner/model.js";
+import { getPriorRunCorrelationId } from "./embedded-agent-runner/run-state.js";
 import { getActiveEmbeddedRunSnapshot } from "./embedded-agent-runner/runs.js";
 import { resolveEmbeddedAgentStreamFn } from "./embedded-agent-runner/stream-resolution.js";
 import { resolveAvailableAgentHarnessPolicy, selectAgentHarness } from "./harness/selection.js";
@@ -388,11 +389,17 @@ export async function runBtwSideQuestion(
     inFlightPrompt = activeRunSnapshot.inFlightPrompt;
   }
   if (messages.length === 0) {
+    // D.7a — when the prior turn touched untrusted content, route the
+    // transcript through the purifier before turning entries into next-turn
+    // prompt messages. Read the prior-turn correlationId recorded in D.6;
+    // undefined here causes the transcript reader to skip purification.
+    const priorCorrelationId = getPriorRunCorrelationId(sessionId);
     messages = await toSimpleContextMessages({
       messages: await readBtwTranscriptMessages({
         sessionFile,
         sessionId,
         snapshotLeafId: activeRunSnapshot?.transcriptLeafId,
+        ...(priorCorrelationId ? { priorCorrelationId } : {}),
       }),
       imageLimits,
     });

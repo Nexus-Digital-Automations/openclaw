@@ -83,6 +83,9 @@ export function ensureMemoryIndexSchema(params: {
 
   ensureColumn(params.db, "files", "source", "TEXT NOT NULL DEFAULT 'memory'");
   ensureColumn(params.db, "chunks", "source", "TEXT NOT NULL DEFAULT 'memory'");
+  // C.1 (1.E) — memory taint tracking. Pre-existing rows resolve to 'trusted'
+  // so behaviour is unchanged for data written before this migration.
+  ensureColumn(params.db, "chunks", "origin_source", "TEXT NOT NULL DEFAULT 'trusted'");
   params.db.exec(`CREATE INDEX IF NOT EXISTS idx_chunks_path ON chunks(path);`);
   params.db.exec(`CREATE INDEX IF NOT EXISTS idx_chunks_source ON chunks(source);`);
 

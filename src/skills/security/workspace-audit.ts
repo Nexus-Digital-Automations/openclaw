@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { listAgentWorkspaceDirs } from "../../agents/workspace-dirs.js";
+import { classifyZone } from "../../agents/workspace-zones.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import type { SecurityAuditFinding } from "../../security/audit.types.js";
 import { isPathInside } from "../../security/scan-paths.js";
@@ -163,6 +164,22 @@ export async function collectWorkspaceSkillSymlinkEscapeFindings(params: {
           workspaceDir: workspacePath,
           skillFilePath: canonicalSkillPath,
           skillRealPath: "(realpath timed out - symlink target unverifiable)",
+        });
+        continue;
+      }
+      // realpath of the target catches symlink-laundering attempts where the
+      // SKILL.md lives in a trusted workspace but resolves into ~/.openclaw/untrusted/.
+      if (classifyZone(skillRealPath) === "untrusted") {
+        findings.push({
+          checkId: "skills.zone.untrusted_resolution",
+          severity: "critical",
+          title: "Workspace skill resolves into the untrusted zone",
+          detail:
+            `Skill ${canonicalSkillPath} resolves to ${skillRealPath}, which lies under the ` +
+            "untrusted-zone root. Untrusted-zone content is treated as model output / external " +
+            "input and must not be promoted into the trusted skill resolution path.",
+          remediation:
+            "Move the skill out of the untrusted-zone tree, or remove the symlink that points there.",
         });
         continue;
       }

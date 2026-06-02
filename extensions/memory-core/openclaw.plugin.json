@@ -1,12 +1,24 @@
 {
   "id": "memory-core",
+  "capabilities": {
+    "hooks": [
+      "before_agent_reply",
+      "gateway_start",
+      "gateway_stop"
+    ]
+  },
   "activation": {
     "onStartup": false
   },
   "kind": "memory",
   "contracts": {
-    "memoryEmbeddingProviders": ["local"],
-    "tools": ["memory_get", "memory_search"]
+    "memoryEmbeddingProviders": [
+      "local"
+    ],
+    "tools": [
+      "memory_get",
+      "memory_search"
+    ]
   },
   "commandAliases": [
     {
@@ -56,7 +68,11 @@
             "properties": {
               "mode": {
                 "type": "string",
-                "enum": ["inline", "separate", "both"]
+                "enum": [
+                  "inline",
+                  "separate",
+                  "both"
+                ]
               },
               "separateReports": {
                 "type": "boolean"

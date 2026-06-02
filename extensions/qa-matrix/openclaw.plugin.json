@@ -1,5 +1,8 @@
 {
   "id": "qa-matrix",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": false
   },

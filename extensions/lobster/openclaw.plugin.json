@@ -1,12 +1,17 @@
 {
   "id": "lobster",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": true
   },
   "name": "Lobster",
   "description": "Lobster workflow tool plugin for typed pipelines and resumable approvals.",
   "contracts": {
-    "tools": ["lobster"]
+    "tools": [
+      "lobster"
+    ]
   },
   "toolMetadata": {
     "lobster": {

@@ -4,7 +4,9 @@
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["cloudflare-ai-gateway"],
+  "providers": [
+    "cloudflare-ai-gateway"
+  ],
   "modelPricing": {
     "providers": {
       "cloudflare-ai-gateway": {
@@ -21,7 +23,9 @@
     "providers": [
       {
         "id": "cloudflare-ai-gateway",
-        "envVars": ["CLOUDFLARE_AI_GATEWAY_API_KEY"]
+        "envVars": [
+          "CLOUDFLARE_AI_GATEWAY_API_KEY"
+        ]
       }
     ]
   },
@@ -45,5 +49,11 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {}
+  },
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "cloudflare-ai-gateway"
+    ]
   }
 }

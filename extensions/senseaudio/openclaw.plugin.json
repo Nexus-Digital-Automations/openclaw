@@ -8,16 +8,23 @@
     "providers": [
       {
         "id": "senseaudio",
-        "envVars": ["SENSEAUDIO_API_KEY"]
+        "envVars": [
+          "SENSEAUDIO_API_KEY"
+        ]
       }
     ]
   },
   "contracts": {
-    "mediaUnderstandingProviders": ["senseaudio"]
+    "mediaUnderstandingProviders": [
+      "senseaudio"
+    ]
   },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
     "properties": {}
+  },
+  "capabilities": {
+    "hooks": []
   }
 }

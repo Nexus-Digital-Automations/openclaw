@@ -105,6 +105,11 @@ function parseMemoryCliNonNegativeIntegerOption(value: string, flag: string): nu
   return parsed;
 }
 
+async function runMemoryReclassify(opts: MemoryCommandOptions) {
+  const runtime = await loadMemoryCliRuntime();
+  await runtime.runMemoryReclassify(opts);
+}
+
 export function registerMemoryCli(program: Command) {
   const memory = program
     .command("memory")
@@ -264,6 +269,18 @@ export function registerMemoryCli(program: Command) {
     .option("--json", "Print JSON")
     .action(async (opts: MemoryRemBackfillOptions) => {
       await runMemoryRemBackfill(opts);
+    });
+
+  memory
+    .command("reclassify")
+    .description(
+      "Re-run workspace-zones classification over all memory chunks and update origin_source",
+    )
+    .option("--agent <id>", "Agent id (default: default agent)")
+    .option("--json", "Print JSON")
+    .option("--verbose", "Verbose logging", false)
+    .action(async (opts: MemoryCommandOptions) => {
+      await runMemoryReclassify(opts);
     });
 
   memory.action(() => {

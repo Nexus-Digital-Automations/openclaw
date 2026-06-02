@@ -1,10 +1,16 @@
 {
   "id": "policy",
+  "capabilities": {
+    "hooks": []
+  },
   "name": "Policy",
   "description": "Adds policy-backed doctor checks for workspace conformance.",
   "activation": {
     "onStartup": true,
-    "onCommands": ["doctor", "policy"]
+    "onCommands": [
+      "doctor",
+      "policy"
+    ]
   },
   "commandAliases": [
     {

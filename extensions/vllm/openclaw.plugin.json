@@ -4,6 +4,10 @@
     "onStartup": false
   },
   "enabledByDefault": true,
+  "capabilities": {
+    "hooks": [],
+    "providers": ["vllm"]
+  },
   "providers": ["vllm"],
   "providerRequest": {
     "providers": {

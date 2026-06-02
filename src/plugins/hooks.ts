@@ -11,6 +11,13 @@ import { formatHookErrorForLog } from "../hooks/fire-and-forget.js";
 import { formatErrorMessage } from "../infra/errors.js";
 import { concatOptionalTextSegments } from "../shared/text/join-segments.js";
 import {
+  checkHookCapability,
+  DECLARED_PLUGIN_HOOK_NAMES,
+  getPluginCapabilities,
+  getPluginCapabilityEnforcement,
+  type PluginHookName as DeclaredPluginHookName,
+} from "./capabilities.js";
+import {
   type GateHookResult,
   type InputGateDecision,
   isHookDecision,
@@ -257,6 +264,145 @@ export type PluginTargetedInboundClaimOutcome =
       status: "error";
       error: string;
     };
+
+// C.3 — declared-surface hook names. Re-export of capabilities.ts'
+// DECLARED_PLUGIN_HOOK_NAMES so the runtime gate and manifest validation
+// share one source of truth. Hooks outside this set never go through
+// the capability gate by design: sync-write integration hooks
+// (tool_result_persist, before_message_write), gateway lifecycle hooks
+// (gateway_start/stop, deactivate), pure instrumentation
+// (heartbeat_prompt_contribution), and claim-style hook names. The gate now
+// runs at every dispatch seam (void / modifying / claiming); these names pass
+// because they are not declared-surface, not because of how they dispatch.
+const DECLARED_HOOK_NAMES: ReadonlySet<string> = DECLARED_PLUGIN_HOOK_NAMES;
+
+// Per-process counter for the warn-mode telemetry. Operators reading the
+// JSON log can sum these to size the manifest-backfill workload, or
+// flip warn → throw once the count steadies near zero post-C.4.
+const capabilityViolationCounters = new Map<string, number>();
+
+// C.3 part 2 — seam label so the warn-telemetry can answer "which dispatch
+// path observed this violation". The gate now runs at runVoidHook,
+// runModifyingHook, and the claiming seams (runClaimingHook /
+// runClaimingHookForPlugin); the label lets audit consumers slice violations
+// by seam without parsing call stacks.
+function recordCapabilityViolation(pluginId: string, hookName: string, seam: string): void {
+  const key = `${pluginId}::${hookName}::${seam}`;
+  capabilityViolationCounters.set(key, (capabilityViolationCounters.get(key) ?? 0) + 1);
+}
+
+/**
+ * Capability gate (C.6 strict-flip × F.4 enforcement tiers). Returns true when
+ * the hook may fire (declared OR not in the declared-surface vocabulary OR
+ * plugin has no manifest yet — grandfather). On a declared-surface violation
+ * the outcome depends on the plugin's enforcement mode (F.4):
+ * "enforced" plugins (new external installs) are hard-failed — throws
+ * CapabilityDeniedError (C.6) and logs `violation_blocked`; "grandfathered" /
+ * unstamped plugins (bundled + pre-feature installs) stay warn-mode — returns
+ * true and logs `violation_observed`. Plugins without manifests grandfather
+ * through unconditionally, matching the pre-C.6 telemetry semantics.
+ *
+ * @stable
+ */
+function passesCapabilityGateOrWarn(
+  pluginId: string,
+  hookName: string,
+  logger: { warn?: (message: string) => void } | undefined,
+  options?: { seam?: string },
+): boolean {
+  if (!DECLARED_HOOK_NAMES.has(hookName)) {
+    return true;
+  }
+  const capabilities = getPluginCapabilities(pluginId);
+  if (!capabilities) {
+    return true;
+  }
+  const verdict = checkHookCapability(capabilities, hookName as DeclaredPluginHookName);
+  if (verdict.ok) {
+    return true;
+  }
+  const seam = options?.seam ?? "runVoidHook";
+  recordCapabilityViolation(pluginId, hookName, seam);
+  const blocked = getPluginCapabilityEnforcement(pluginId) === "enforced";
+  logger?.warn?.(
+    JSON.stringify({
+      event: blocked
+        ? "plugin.capability.violation_blocked"
+        : "plugin.capability.violation_observed",
+      pluginId,
+      hookName,
+      seam,
+      reason: verdict.reason,
+      declared: capabilities.hooks ?? [],
+    }),
+  );
+  if (blocked) {
+    throw new CapabilityDeniedError({
+      pluginId,
+      hookName,
+      seam,
+      reason: verdict.reason,
+      declared: capabilities.hooks ?? [],
+    });
+  }
+  // Grandfathered / unstamped plugins stay warn-and-run: telemetry recorded
+  // above, handler still fires so bundled + pre-feature installs don't break.
+  return true;
+}
+
+/**
+ * Thrown by the C.6 strict-mode capability gate when a plugin attempts to
+ * fire a hook that its signed manifest does not declare. Carries the
+ * forensic fields the audit-chain entry would normally hold so callers
+ * that catch the error can surface them without re-deriving.
+ *
+ * @stable
+ */
+export class CapabilityDeniedError extends Error {
+  readonly pluginId: string;
+  readonly hookName: string;
+  readonly seam: string;
+  readonly reason: string;
+  readonly declared: ReadonlyArray<string>;
+
+  constructor(input: {
+    pluginId: string;
+    hookName: string;
+    seam: string;
+    reason: string;
+    declared: ReadonlyArray<string>;
+  }) {
+    super(
+      `plugin "${input.pluginId}" hook "${input.hookName}" refused at ${input.seam}: ${input.reason}`,
+    );
+    this.name = "CapabilityDeniedError";
+    this.pluginId = input.pluginId;
+    this.hookName = input.hookName;
+    this.seam = input.seam;
+    this.reason = input.reason;
+    this.declared = input.declared;
+  }
+}
+
+// Test-only: drive the gate directly. Production code paths invoke the
+// gate via runVoidHook; tests assert telemetry shape without standing up
+// a full hook registry.
+export function passesCapabilityGateOrWarnForTests(
+  pluginId: string,
+  hookName: string,
+  logger: { warn?: (message: string) => void } | undefined,
+  options?: { seam?: string },
+): boolean {
+  return passesCapabilityGateOrWarn(pluginId, hookName, logger, options);
+}
+
+export function snapshotCapabilityViolationsForTests(): ReadonlyMap<string, number> {
+  return new Map(capabilityViolationCounters);
+}
+
+export function resetCapabilityViolationsForTests(): void {
+  capabilityViolationCounters.clear();
+}
 
 type SyncHookName = "tool_result_persist" | "before_message_write";
 type SyncHookHandler<K extends SyncHookName> = NonNullable<PluginHookRegistration<K>["handler"]>;
@@ -593,6 +739,26 @@ export function createHookRunner(
     return handler(event, ctx) as SyncHookResult<K> | PromiseLike<unknown>;
   };
 
+  // Run the capability gate for one handler at a dispatch seam. Returns true to
+  // proceed, false to skip. An "enforced" violation throws CapabilityDeniedError
+  // from the gate (C.6 hard-fail); we contain it here so a single offending
+  // plugin skips its own handler without aborting sibling handlers or the whole
+  // turn. The gate already recorded violation_blocked telemetry before throwing.
+  function handlerClearsCapabilityGate(
+    pluginId: string,
+    hookName: PluginHookName,
+    seam: string,
+  ): boolean {
+    try {
+      return passesCapabilityGateOrWarn(pluginId, hookName, logger, { seam });
+    } catch (err) {
+      if (err instanceof CapabilityDeniedError) {
+        return false;
+      }
+      throw err;
+    }
+  }
+
   /**
    * Run a hook that doesn't return a value (fire-and-forget style).
    * All handlers are executed in parallel for performance.
@@ -611,6 +777,9 @@ export function createHookRunner(
     logger?.debug?.(`[hooks] running ${hookName} (${hooks.length} handlers)`);
 
     const promises = hooks.map(async (hook) => {
+      if (!handlerClearsCapabilityGate(hook.pluginId, hookName, "runVoidHook")) {
+        return;
+      }
       try {
         const promise = Promise.resolve(
           (hook.handler as (event: unknown, ctx: unknown) => Promise<void> | void)(event, ctx),
@@ -649,6 +818,9 @@ export function createHookRunner(
     let result: TResult | undefined;
 
     for (const hook of hooks) {
+      if (!handlerClearsCapabilityGate(hook.pluginId, hookName, "runModifyingHook")) {
+        continue;
+      }
       try {
         const handler = hook.handler as (event: unknown, ctx: unknown) => Promise<TResult>;
         const promise = Promise.resolve(handler(event, ctx));
@@ -730,6 +902,9 @@ export function createHookRunner(
     ctx: Parameters<NonNullable<PluginHookRegistration<K>["handler"]>>[1],
   ): Promise<TResult | undefined> {
     for (const hook of hooks) {
+      if (!handlerClearsCapabilityGate(hook.pluginId, hookName, "runClaimingHook")) {
+        continue;
+      }
       try {
         const promise = Promise.resolve(
           (hook.handler as (event: unknown, ctx: unknown) => Promise<TResult | void>)(event, ctx),
@@ -781,6 +956,9 @@ export function createHookRunner(
 
     let firstError: string | null = null;
     for (const hook of hooks) {
+      if (!handlerClearsCapabilityGate(hook.pluginId, hookName, "runClaimingHookForPlugin")) {
+        continue;
+      }
       try {
         const promise = Promise.resolve(
           (hook.handler as (event: unknown, ctx: unknown) => Promise<TResult | void>)(event, ctx),

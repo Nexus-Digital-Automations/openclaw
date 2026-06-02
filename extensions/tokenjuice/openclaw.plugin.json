@@ -6,11 +6,17 @@
   "name": "tokenjuice",
   "description": "Compacts exec and bash tool results with tokenjuice reducers.",
   "contracts": {
-    "agentToolResultMiddleware": ["openclaw", "codex"]
+    "agentToolResultMiddleware": [
+      "openclaw",
+      "codex"
+    ]
   },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
     "properties": {}
+  },
+  "capabilities": {
+    "hooks": []
   }
 }

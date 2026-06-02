@@ -1,0 +1,88 @@
+# .security-ignore — verified false positives from the local pre-commit
+# security scanner (~/.claude/hooks/utils/security_scanner.py).
+#
+# Every entry below was individually inspected on 2026-05-29 and confirmed to
+# be a test fixture, a placeholder / env-var passthrough, URL-redaction code,
+# or a documented local-only default — never a real credential. Maintainer-
+# authorized. Source report: .claude/reports/security/20260529_140505.md
+# (212 critical + 43 warning findings; 0 real secrets).
+#
+# Why tool-qualified, not severity-qualified: ALL of these findings come from
+# `pattern-scanner` (the regex heuristic). The high-fidelity scanners —
+# gitleaks, detect-secrets, trivy, semgrep — flagged NONE of these files,
+# which is what gives confidence they are false positives. Each rule below is
+# scoped to `[tool:pattern-scanner]` (or `[tool:gitignore-check]`) so the
+# entropy/verified-pattern secret scanners stay fully active on these paths:
+# a real secret accidentally committed here would still be caught. A bare
+# `[severity:critical]` blanket is deliberately avoided — it would blind every
+# tool, not just the noisy one.
+#
+# Format (see security_scanner.py): gitignore-style globs (`*` within one path
+# segment, `**` across), full-path fullmatch, first rule wins. Credential-class
+# findings require a [tool:|category:|severity:] qualifier (Cat-18 anti-drive-by);
+# the qualifier here is the tool name.
+
+# ── Test fixtures (*.test.ts) ────────────────────────────────────────────────
+# Deliberately fake secrets, several existing precisely to assert the redactor /
+# output-firewall strips them: sk-not-a-real-format-firewall-*, ghp_1234…cdef
+# (inside `expect(...).not.toContain` redaction tests), feishu_app_secret_…,
+# "from-parent". Scoped to pattern-scanner so gitleaks/detect-secrets still run.
+[tool:pattern-scanner] **/*.test.ts
+
+# ── Test infrastructure that is not *.test.ts but still seeds fixtures ───────
+# Harnesses, test-support modules, comfy test-helpers, and qa-lab smoke/builder
+# runtimes inject dummy credentials for scenario setup.
+[tool:pattern-scanner] **/*.test-harness.ts
+[tool:pattern-scanner] **/*.test-support.ts
+[tool:pattern-scanner] extensions/comfy/test-helpers.ts
+[tool:pattern-scanner] extensions/qa-lab/src/**
+# Android unit tests (src/test/) use dummy gateway-auth fixtures such as
+# "shared-password" / "shared-token" / "bootstrap-1" for the connect-auth and
+# config-resolver test cases.
+[tool:pattern-scanner] apps/android/app/src/test/**
+
+# ── Docker / e2e shell scripts ───────────────────────────────────────────────
+# Env-var passthroughs of the form VAR="${VAR:-}" and documented placeholder
+# values for throwaway containers. No literal secrets.
+[tool:pattern-scanner] scripts/**/*.sh
+
+# ── Verified production-source false positives (each line inspected) ─────────
+# proxy-cli.runtime.ts:132 / slash-http.ts:145 — `url.password = "redacted"`:
+#   the URL sanitizer that *removes* credentials before logging.
+[tool:pattern-scanner] src/cli/proxy-cli.runtime.ts
+[tool:pattern-scanner] extensions/mattermost/src/mattermost/slash-http.ts
+# auth-rate-limit.ts:39 — AUTH_RATE_LIMIT_SCOPE_SHARED_SECRET = "shared-secret":
+#   a rate-limit scope label, not a credential.
+[tool:pattern-scanner] src/gateway/auth-rate-limit.ts
+# ollama index.ts:332 (error-message text) + discovery-shared.ts:8
+#   (OLLAMA_DEFAULT_API_KEY = "ollama-local"): documented local-only default;
+#   Ollama runs locally and accepts any non-empty key.
+[tool:pattern-scanner] extensions/ollama/index.ts
+[tool:pattern-scanner] extensions/ollama/src/discovery-shared.ts
+
+# ── Non-credential code-pattern warnings ─────────────────────────────────────
+# dynamic-code-evaluation: skill-scanner fixtures feeding its own eval detector,
+#   native WebView eval on the app clients, and Playwright page.evaluate — all
+#   intentional, none execute attacker-controlled input.
+[tool:pattern-scanner] src/security/skill-scanner.test.ts
+[tool:pattern-scanner] extensions/browser/src/browser/pw-tools-core.interactions.ts
+[tool:pattern-scanner] apps/android/app/src/main/java/ai/openclaw/app/node/CanvasController.kt
+[tool:pattern-scanner] apps/ios/Sources/Screen/ScreenController.swift
+[tool:pattern-scanner] apps/macos/Sources/OpenClaw/CanvasManager.swift
+[tool:pattern-scanner] apps/macos/Sources/OpenClaw/CanvasWindowController.swift
+# weak-hash (MD5/SHA1): non-security content hashing — asset digests in the
+#   vendored diff-viewer bundles and a media chunk id in qqbot. Not used for auth.
+[tool:pattern-scanner] dist-runtime/extensions/diffs/assets/viewer-runtime.js
+[tool:pattern-scanner] extensions/diffs/assets/viewer-runtime.js
+[tool:pattern-scanner] extensions/qqbot/src/engine/api/media-chunked.ts
+# path-traversal: operator-run local model-usage report script.
+[tool:pattern-scanner] skills/model-usage/scripts/model_usage.py
+
+# ── missing-gitignore-pattern (.gitignore) ───────────────────────────────────
+# The scanner suggests adding .env.* / *.key / *.pem / *.p12 / *secrets* to
+# .gitignore. False positives for this repo: `*secrets*` would ignore 30+
+# intentionally-tracked source files (src/secrets/*.ts, secrets-cli.ts, …),
+# `.env.*` would ignore the committed .env.example, and real credentials live
+# outside the tree in ~/.openclaw/credentials/ — not as repo-local key files
+# (none are tracked). Editing .gitignore would orphan tracked source.
+[tool:gitignore-check] .gitignore

@@ -8,7 +8,11 @@
     "providers": [
       {
         "id": "alibaba",
-        "envVars": ["MODELSTUDIO_API_KEY", "DASHSCOPE_API_KEY", "QWEN_API_KEY"]
+        "envVars": [
+          "MODELSTUDIO_API_KEY",
+          "DASHSCOPE_API_KEY",
+          "QWEN_API_KEY"
+        ]
       }
     ]
   },
@@ -21,7 +25,9 @@
       "groupId": "alibaba",
       "groupLabel": "Alibaba Model Studio",
       "groupHint": "DashScope / Model Studio API key",
-      "onboardingScopes": ["image-generation"],
+      "onboardingScopes": [
+        "image-generation"
+      ],
       "optionKey": "alibabaModelStudioApiKey",
       "cliFlag": "--alibaba-model-studio-api-key",
       "cliOption": "--alibaba-model-studio-api-key <key>",
@@ -29,11 +35,19 @@
     }
   ],
   "contracts": {
-    "videoGenerationProviders": ["alibaba"]
+    "videoGenerationProviders": [
+      "alibaba"
+    ]
   },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
     "properties": {}
+  },
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "alibaba"
+    ]
   }
 }

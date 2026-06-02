@@ -7,7 +7,9 @@
     "providers": [
       {
         "id": "firecrawl",
-        "envVars": ["FIRECRAWL_API_KEY"]
+        "envVars": [
+          "FIRECRAWL_API_KEY"
+        ]
       }
     ]
   },
@@ -34,12 +36,21 @@
     }
   },
   "contracts": {
-    "webFetchProviders": ["firecrawl"],
-    "webSearchProviders": ["firecrawl"],
-    "tools": ["firecrawl_search", "firecrawl_scrape"]
+    "webFetchProviders": [
+      "firecrawl"
+    ],
+    "webSearchProviders": [
+      "firecrawl"
+    ],
+    "tools": [
+      "firecrawl_search",
+      "firecrawl_scrape"
+    ]
   },
   "configContracts": {
-    "compatibilityRuntimePaths": ["tools.web.search.apiKey"]
+    "compatibilityRuntimePaths": [
+      "tools.web.search.apiKey"
+    ]
   },
   "configSchema": {
     "type": "object",
@@ -50,7 +61,10 @@
         "additionalProperties": false,
         "properties": {
           "apiKey": {
-            "type": ["string", "object"]
+            "type": [
+              "string",
+              "object"
+            ]
           },
           "baseUrl": {
             "type": "string"
@@ -62,7 +76,10 @@
         "additionalProperties": false,
         "properties": {
           "apiKey": {
-            "type": ["string", "object"]
+            "type": [
+              "string",
+              "object"
+            ]
           },
           "baseUrl": {
             "type": "string"
@@ -79,5 +96,8 @@
         }
       }
     }
+  },
+  "capabilities": {
+    "hooks": []
   }
 }

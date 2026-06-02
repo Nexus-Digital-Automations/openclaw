@@ -4,12 +4,16 @@
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["microsoft-foundry"],
+  "providers": [
+    "microsoft-foundry"
+  ],
   "setup": {
     "providers": [
       {
         "id": "microsoft-foundry",
-        "envVars": ["AZURE_OPENAI_API_KEY"]
+        "envVars": [
+          "AZURE_OPENAI_API_KEY"
+        ]
       }
     ]
   },
@@ -39,5 +43,11 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {}
+  },
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "microsoft-foundry"
+    ]
   }
 }

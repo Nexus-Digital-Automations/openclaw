@@ -11,6 +11,7 @@ import {
 import { expandHomePrefix, resolveOsHomeDir } from "../infra/home-dir.js";
 import { hasEncodedFileUrlSeparator, trySafeFileURLToPath } from "../infra/local-file-access.js";
 import { sniffMimeFromBase64 } from "../media/sniff-mime-from-base64.js";
+import { sanitizeSkillMarkdownText, wrapExternalContent } from "../security/external-content.js";
 import {
   REQUIRED_PARAM_GROUPS,
   assertRequiredParams,
@@ -27,6 +28,7 @@ import { assertSandboxPath } from "./sandbox-paths.js";
 import type { SandboxFsBridge } from "./sandbox/fs-bridge.js";
 import { createEditTool, createReadTool, createWriteTool } from "./sessions/index.js";
 import { sanitizeToolResultImages } from "./tool-images.js";
+import { classifyZone } from "./workspace-zones.js";
 
 export {
   REQUIRED_PARAM_GROUPS,
@@ -873,13 +875,76 @@ export function createOpenClawReadTool(
         typeof normalizedRecord?.path === "string" ? normalizedRecord.path : "<unknown>";
       const strippedDetailsResult = stripReadTruncationContentDetails(result);
       const normalizedResult = await normalizeReadImageResult(strippedDetailsResult, filePath);
+      const zoneWrapped = wrapResultIfFromUntrustedZone(normalizedResult, filePath);
+      const skillStripped = stripSkillMarkdownInjectionTokens(zoneWrapped, filePath);
       return sanitizeToolResultImages(
-        normalizedResult,
+        skillStripped,
         `read:${filePath}`,
         options?.imageSanitization,
       );
     },
   };
+}
+
+// Reads of SKILL.md (the workspace skill body filename) may surface model-
+// facing markdown that includes injection-style LLM special tokens. Strip
+// just the special-token literals — markers and Unicode are not normalized
+// here because legitimate skill docs may reference them. Trusted-zone reads
+// of other files are untouched.
+function stripSkillMarkdownInjectionTokens(
+  result: AgentToolResult<unknown>,
+  filePath: string,
+): AgentToolResult<unknown> {
+  if (!filePath || path.basename(filePath).toLowerCase() !== "skill.md") {
+    return result;
+  }
+  const content = Array.isArray(result.content) ? result.content : [];
+  const nextContent = content.map((block) => {
+    if (
+      block &&
+      typeof block === "object" &&
+      (block as { type?: unknown }).type === "text" &&
+      typeof (block as { text?: unknown }).text === "string"
+    ) {
+      const textBlock = block as TextContentBlock & { text: string };
+      return Object.assign({}, textBlock, {
+        text: sanitizeSkillMarkdownText(textBlock.text),
+      }) satisfies TextContentBlock;
+    }
+    return block;
+  });
+  return { ...result, content: nextContent };
+}
+
+// Untrusted-zone reads represent model-generated or externally-fetched
+// content masquerading as a workspace file — wrap so downstream context never
+// treats it as trusted instruction source.
+function wrapResultIfFromUntrustedZone(
+  result: AgentToolResult<unknown>,
+  filePath: string,
+): AgentToolResult<unknown> {
+  if (!filePath || !path.isAbsolute(filePath)) {
+    return result;
+  }
+  if (classifyZone(filePath) !== "untrusted") {
+    return result;
+  }
+  const content = Array.isArray(result.content) ? result.content : [];
+  const nextContent = content.map((block) => {
+    if (
+      block &&
+      typeof block === "object" &&
+      (block as { type?: unknown }).type === "text" &&
+      typeof (block as { text?: unknown }).text === "string"
+    ) {
+      const textBlock = block as TextContentBlock & { text: string };
+      return Object.assign({}, textBlock, {
+        text: wrapExternalContent(textBlock.text, { source: "untrusted_zone" }),
+      }) satisfies TextContentBlock;
+    }
+    return block;
+  });
+  return { ...result, content: nextContent };
 }
 
 function createSandboxReadOperations(params: SandboxToolParams) {

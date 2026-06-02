@@ -13,6 +13,8 @@
   "runtime-env",
   "runtime-logger",
   "proxy-capture",
+  "http-guard-runtime",
+  "fs-guard-runtime",
   "runtime-secret-resolution",
   "setup",
   "setup-adapter-runtime",

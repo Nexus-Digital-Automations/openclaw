@@ -214,6 +214,10 @@ export type ExecApprovalRequestPayload = {
   turnSourceTo?: string | null;
   turnSourceAccountId?: string | null;
   turnSourceThreadId?: string | number | null;
+  // External-content body literals matched in this argv. UI surfaces these so
+  // the operator sees WHICH external block is being forwarded into the call;
+  // see ExecApprovalRecord.triggeredCanaries.
+  triggeredCanaries?: ReadonlyArray<string>;
 };
 
 export type ExecApprovalRequest = {

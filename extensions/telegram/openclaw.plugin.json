@@ -1,11 +1,18 @@
 {
   "id": "telegram",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": false
   },
-  "channels": ["telegram"],
+  "channels": [
+    "telegram"
+  ],
   "channelEnvVars": {
-    "telegram": ["TELEGRAM_BOT_TOKEN"]
+    "telegram": [
+      "TELEGRAM_BOT_TOKEN"
+    ]
   },
   "configSchema": {
     "type": "object",

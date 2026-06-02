@@ -7,19 +7,29 @@ import {
   type SimpleStreamOptions,
   type ThinkingLevel,
 } from "openclaw/plugin-sdk/llm";
+import { createSubsystemLogger } from "openclaw/plugin-sdk/logging-core";
 import { parseStrictNonNegativeInteger } from "openclaw/plugin-sdk/number-runtime";
 import { createProviderHttpError } from "openclaw/plugin-sdk/provider-http";
 import {
   buildGuardedModelFetch,
   coerceTransportToolCallArguments,
   createEmptyTransportUsage,
+  createOutputFirewall,
+  createOutputFirewallState,
   createWritableTransportEventStream,
+  envelopeHash,
   failTransportStream,
   finalizeTransportStream,
+  GENESIS_PREV_HASH,
   mergeTransportHeaders,
+  mintEnvelope,
+  recordEnvelopeNonce,
   sanitizeTransportPayloadText,
+  scanOutputChunk,
+  snapshotFirewallInputs,
   stripSystemPromptCacheBoundary,
   transformTransportMessages,
+  type VerifiedCmdEnvelope,
   type WritableTransportStream,
 } from "openclaw/plugin-sdk/provider-transport-runtime";
 import {
@@ -41,6 +51,8 @@ import {
   isGoogleVertexCredentialsMarker,
   resolveGoogleVertexAuthorizedUserHeaders,
 } from "./vertex-adc.js";
+
+const log = createSubsystemLogger("google-transport");
 
 type CanonicalGoogleTransportApi = "google-generative-ai" | "google-vertex";
 type GoogleTransportApi = CanonicalGoogleTransportApi | "openclaw-google-generative-ai-transport";
@@ -91,6 +103,10 @@ type GoogleTransportContentBlock =
       name: string;
       arguments: Record<string, unknown>;
       thoughtSignature?: string;
+      // P1.1 verified-cmd envelope minted at extraction time. Dispatch refuses
+      // tool calls whose envelope does not chain-verify; absence is also a
+      // refusal. Turn-scoped, non-persisted, never exposed to the model.
+      verifiedCmd?: VerifiedCmdEnvelope;
     };
 
 type MutableAssistantOutput = {
@@ -1235,6 +1251,51 @@ function createGoogleTransportStreamFn(kind: CanonicalGoogleTransportApi): Strea
           request: params,
         });
         stream.push({ type: "start", partial: output as never });
+        let firewallState = createOutputFirewallState();
+        // Turn-level AC firewall: trips the whole turn so functionCall parts
+        // cannot dispatch tool calls once a sensitive literal is echoed.
+        const turnFirewall = createOutputFirewall(snapshotFirewallInputs());
+        let firewallTripped = false;
+        // P1.1 verified-cmd chain head, turn-scoped per verified-cmd.ts invariant.
+        // Each minted envelope's hash becomes the next envelope's prevHash.
+        let verifiedCmdChainHead = GENESIS_PREV_HASH;
+        const tripGoogleFirewall = (
+          family: string,
+          literalLength: number,
+          offset: number,
+        ): void => {
+          firewallTripped = true;
+          output.stopReason = "error";
+          log.warn(`[output-firewall] turn aborted: Google text echoed sensitive literal`, {
+            event: "output_firewall.trip",
+            family,
+            literal: "<redacted>",
+            literal_length: literalLength,
+            offset,
+          });
+        };
+        const scanGoogleTextForTurnTrip = (chunk: string): void => {
+          if (firewallTripped || chunk.length === 0) {
+            return;
+          }
+          const trip = turnFirewall.scan(chunk);
+          if (trip !== null) {
+            tripGoogleFirewall(trip.family, trip.literal.length, trip.offset);
+          }
+        };
+        const firewallTextDelta = (raw: string): string => {
+          scanGoogleTextForTurnTrip(raw);
+          const verdict = scanOutputChunk(raw, firewallState);
+          firewallState = verdict.nextState;
+          if (verdict.kind !== "block") {
+            return raw;
+          }
+          log.warn(
+            `[output-firewall] blocked Google text delta with sensitive literal match=${verdict.matched.length}b`,
+            { event: "output_firewall.block" },
+          );
+          return verdict.sanitized;
+        };
         let currentBlockIndex = -1;
         const chunks =
           sse.firstChunk === undefined
@@ -1307,7 +1368,9 @@ function createGoogleTransportStreamFn(kind: CanonicalGoogleTransportApi): Strea
                     partial: output as never,
                   });
                 } else if (activeBlock?.type === "text") {
-                  activeBlock.text += part.text;
+                  const safeText =
+                    typeof part.text === "string" ? firewallTextDelta(part.text) : part.text;
+                  activeBlock.text += safeText;
                   activeBlock.textSignature = retainThoughtSignature(
                     activeBlock.textSignature,
                     part.thoughtSignature,
@@ -1315,12 +1378,25 @@ function createGoogleTransportStreamFn(kind: CanonicalGoogleTransportApi): Strea
                   stream.push({
                     type: "text_delta",
                     contentIndex: currentBlockIndex,
-                    delta: part.text,
+                    delta: safeText,
                     partial: output as never,
                   });
                 }
               }
               if (part.functionCall) {
+                if (firewallTripped) {
+                  // Sensitive literal already echoed this turn; refuse to
+                  // emit functionCall so the tool path cannot act on leaked
+                  // context.
+                  log.warn(
+                    "[output-firewall] suppressing Google functionCall after firewall trip",
+                    {
+                      event: "output_firewall.tool_suppressed",
+                      tool_name: part.functionCall.name ?? "<unknown>",
+                    },
+                  );
+                  continue;
+                }
                 if (currentBlockIndex >= 0) {
                   pushTextBlockEnd(stream, output, currentBlockIndex);
                   currentBlockIndex = -1;
@@ -1352,6 +1428,16 @@ function createGoogleTransportStreamFn(kind: CanonicalGoogleTransportApi): Strea
                     part.thoughtSignature,
                   ),
                 };
+                // P1.1: mint envelope once args are finalized. Chain head moves
+                // forward only on successful mint, preserving turn order.
+                const envelope = mintEnvelope(
+                  { name: toolCall.name, args: toolCall.arguments },
+                  "model",
+                  verifiedCmdChainHead,
+                );
+                toolCall.verifiedCmd = envelope;
+                verifiedCmdChainHead = envelopeHash(envelope);
+                recordEnvelopeNonce(envelope.nonce);
                 output.content.push(toolCall);
                 const blockIndex = output.content.length - 1;
                 stream.push({
@@ -1374,7 +1460,7 @@ function createGoogleTransportStreamFn(kind: CanonicalGoogleTransportApi): Strea
               }
             }
           }
-          if (typeof candidate?.finishReason === "string") {
+          if (typeof candidate?.finishReason === "string" && !firewallTripped) {
             output.stopReason = mapStopReasonString(candidate.finishReason);
             if (output.content.some((block) => block.type === "toolCall")) {
               output.stopReason = "toolUse";

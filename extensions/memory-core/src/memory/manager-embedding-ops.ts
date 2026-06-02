@@ -17,6 +17,7 @@ import {
   type MemorySource,
 } from "openclaw/plugin-sdk/memory-core-host-engine-storage";
 import { MAX_TIMER_TIMEOUT_MS, resolveTimerTimeoutMs } from "openclaw/plugin-sdk/number-runtime";
+import { originForAbsolutePath } from "openclaw/plugin-sdk/security-runtime";
 import {
   MEMORY_BATCH_FAILURE_LIMIT,
   recordMemoryBatchFailure,
@@ -688,6 +689,11 @@ export abstract class MemoryManagerEmbeddingOps extends MemoryManagerSyncOps {
     vectorReady: boolean,
   ): void {
     const now = Date.now();
+    // Workspace-zone classification is per-file, so resolve once per writeChunks
+    // call. Untrusted-zone ingest lets the retrieval-time wrap (see
+    // tools.citations.ts decorateCitations) sandwich snippets in external-content
+    // markers before the model sees them.
+    const originSource = originForAbsolutePath(entry.absPath);
     this.clearIndexedFileData(entry.path, source);
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
@@ -697,13 +703,14 @@ export abstract class MemoryManagerEmbeddingOps extends MemoryManagerSyncOps {
       );
       this.db
         .prepare(
-          `INSERT INTO chunks (id, path, source, start_line, end_line, hash, model, text, embedding, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO chunks (id, path, source, start_line, end_line, hash, model, text, embedding, origin_source, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
              hash=excluded.hash,
              model=excluded.model,
              text=excluded.text,
              embedding=excluded.embedding,
+             origin_source=excluded.origin_source,
              updated_at=excluded.updated_at`,
         )
         .run(
@@ -716,6 +723,7 @@ export abstract class MemoryManagerEmbeddingOps extends MemoryManagerSyncOps {
           model,
           chunk.text,
           JSON.stringify(embedding),
+          originSource,
           now,
         );
       if (vectorReady && embedding.length > 0) {

@@ -61,4 +61,14 @@ export const OAUTH_REFRESH_CALL_TIMEOUT_MS = 120_000;
 export const EXTERNAL_CLI_SYNC_TTL_MS = 15 * 60 * 1000;
 export const EXTERNAL_CLI_NEAR_EXPIRY_MS = 10 * 60 * 1000;
 
+// Idle-residency bound for the in-memory credential caches (loaded-auth-store
+// + runtime snapshots). Those caches hold plaintext credential material
+// (api_key / token / access / refresh); JS strings can't be zeroed, so the
+// only lever is the residency *window* — drop a cached store once it has been
+// untouched for this long instead of holding it for the whole process
+// lifetime. Deliberately distinct from EXTERNAL_CLI_SYNC_TTL_MS, which bounds
+// external-CLI sync freshness (a different axis) — conflating them would couple
+// a security knob to an unrelated cache-freshness knob.
+export const CREDENTIAL_RESIDENCY_IDLE_TTL_MS = 5 * 60 * 1000;
+
 export const log = createSubsystemLogger("agents/auth-profiles");

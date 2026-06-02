@@ -343,6 +343,10 @@ async function resolveForcedActiveCommandSecretTargets(params: {
   allowedPaths?: ReadonlySet<string>;
   forcedActivePaths?: ReadonlySet<string>;
   optionalActivePaths?: ReadonlySet<string>;
+  // G.3 — when set, tags resolved bytes to the requesting session so
+  // cross-session reads can be refused. Gateway RPC threads client.connId;
+  // CLI / startup callers pass undefined.
+  sessionId?: string;
 }): Promise<void> {
   const activePaths = new Set([
     ...(params.forcedActivePaths ?? []),
@@ -376,6 +380,7 @@ async function resolveForcedActiveCommandSecretTargets(params: {
         config: params.sourceConfig,
         env: context.env,
         cache: context.cache,
+        sessionId: params.sessionId,
       });
       assertExpectedResolvedSecretValue({
         value: resolved,
@@ -399,6 +404,9 @@ export function resolveCommandSecretsFromActiveRuntimeSnapshot(params: {
   forcedActivePaths?: ReadonlySet<string>;
   optionalActivePaths?: ReadonlySet<string>;
   providerOverrides?: CommandSecretProviderOverrides;
+  // G.3 — forwarded to inner resolve calls; gateway RPC threads client.connId,
+  // CLI callers pass undefined explicitly per the grandfather policy.
+  sessionId?: string;
 }): Promise<{
   assignments: CommandSecretAssignment[];
   diagnostics: string[];
@@ -419,6 +427,7 @@ export function resolveCommandSecretsFromActiveRuntimeSnapshot(params: {
     forcedActivePaths: params.forcedActivePaths,
     optionalActivePaths: params.optionalActivePaths,
     providerOverrides: params.providerOverrides,
+    sessionId: params.sessionId,
   });
 }
 
@@ -430,6 +439,7 @@ async function resolveCommandSecretsFromSnapshot(params: {
   forcedActivePaths?: ReadonlySet<string>;
   optionalActivePaths?: ReadonlySet<string>;
   providerOverrides?: CommandSecretProviderOverrides;
+  sessionId?: string;
 }): Promise<{
   assignments: CommandSecretAssignment[];
   diagnostics: string[];
@@ -469,6 +479,7 @@ async function resolveCommandSecretsFromSnapshot(params: {
     allowedPaths: params.allowedPaths,
     forcedActivePaths: params.forcedActivePaths,
     optionalActivePaths: params.optionalActivePaths,
+    sessionId: params.sessionId,
   });
 
   const warningSource = context?.warnings ?? params.activeSnapshot.warnings;

@@ -5,16 +5,26 @@
   },
   "enabledByDefault": true,
   "providerCatalogEntry": "./provider-discovery.ts",
-  "providers": ["volcengine", "volcengine-plan"],
+  "providers": [
+    "volcengine",
+    "volcengine-plan"
+  ],
   "setup": {
     "providers": [
       {
         "id": "volcengine",
-        "envVars": ["VOLCANO_ENGINE_API_KEY"]
+        "envVars": [
+          "VOLCANO_ENGINE_API_KEY"
+        ]
       },
       {
         "id": "volcengine-tts",
-        "envVars": ["VOLCENGINE_TTS_API_KEY", "BYTEPLUS_SEED_SPEECH_API_KEY", "VOLCENGINE_TTS_APPID", "VOLCENGINE_TTS_TOKEN"]
+        "envVars": [
+          "VOLCENGINE_TTS_API_KEY",
+          "BYTEPLUS_SEED_SPEECH_API_KEY",
+          "VOLCENGINE_TTS_APPID",
+          "VOLCENGINE_TTS_TOKEN"
+        ]
       }
     ]
   },
@@ -44,7 +54,10 @@
           {
             "id": "doubao-seed-code-preview-251028",
             "name": "doubao-seed-code-preview-251028",
-            "input": ["text", "image"],
+            "input": [
+              "text",
+              "image"
+            ],
             "contextWindow": 256000,
             "maxTokens": 4096,
             "cost": {
@@ -57,7 +70,10 @@
           {
             "id": "doubao-seed-1-8-251228",
             "name": "Doubao Seed 1.8",
-            "input": ["text", "image"],
+            "input": [
+              "text",
+              "image"
+            ],
             "contextWindow": 256000,
             "maxTokens": 4096,
             "cost": {
@@ -70,7 +86,10 @@
           {
             "id": "kimi-k2-5-260127",
             "name": "Kimi K2.5",
-            "input": ["text", "image"],
+            "input": [
+              "text",
+              "image"
+            ],
             "contextWindow": 256000,
             "maxTokens": 4096,
             "cost": {
@@ -83,7 +102,10 @@
           {
             "id": "glm-4-7-251222",
             "name": "GLM 4.7",
-            "input": ["text", "image"],
+            "input": [
+              "text",
+              "image"
+            ],
             "contextWindow": 200000,
             "maxTokens": 4096,
             "cost": {
@@ -96,7 +118,10 @@
           {
             "id": "deepseek-v3-2-251201",
             "name": "DeepSeek V3.2",
-            "input": ["text", "image"],
+            "input": [
+              "text",
+              "image"
+            ],
             "contextWindow": 128000,
             "maxTokens": 4096,
             "cost": {
@@ -115,7 +140,9 @@
           {
             "id": "ark-code-latest",
             "name": "Ark Coding Plan",
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "contextWindow": 256000,
             "maxTokens": 4096,
             "cost": {
@@ -128,7 +155,9 @@
           {
             "id": "doubao-seed-code",
             "name": "Doubao Seed Code",
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "contextWindow": 256000,
             "maxTokens": 4096,
             "cost": {
@@ -141,7 +170,9 @@
           {
             "id": "glm-4.7",
             "name": "GLM 4.7 Coding",
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "contextWindow": 200000,
             "maxTokens": 4096,
             "cost": {
@@ -154,7 +185,9 @@
           {
             "id": "kimi-k2-thinking",
             "name": "Kimi K2 Thinking",
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "contextWindow": 256000,
             "maxTokens": 4096,
             "cost": {
@@ -167,7 +200,9 @@
           {
             "id": "kimi-k2.5",
             "name": "Kimi K2.5 Coding",
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "contextWindow": 256000,
             "maxTokens": 4096,
             "cost": {
@@ -180,7 +215,9 @@
           {
             "id": "doubao-seed-code-preview-251028",
             "name": "Doubao Seed Code Preview",
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "contextWindow": 256000,
             "maxTokens": 4096,
             "cost": {
@@ -219,6 +256,15 @@
     "properties": {}
   },
   "contracts": {
-    "speechProviders": ["volcengine"]
+    "speechProviders": [
+      "volcengine"
+    ]
+  },
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "volcengine",
+      "volcengine-plan"
+    ]
   }
 }

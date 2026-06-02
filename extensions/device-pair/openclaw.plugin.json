@@ -1,5 +1,8 @@
 {
   "id": "device-pair",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": true
   },

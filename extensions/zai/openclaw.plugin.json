@@ -1,14 +1,24 @@
 {
   "id": "zai",
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "zai"
+    ]
+  },
   "activation": {
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["zai"],
+  "providers": [
+    "zai"
+  ],
   "providerEndpoints": [
     {
       "endpointClass": "zai-native",
-      "hosts": ["api.z.ai"]
+      "hosts": [
+        "api.z.ai"
+      ]
     }
   ],
   "providerRequest": {
@@ -22,8 +32,13 @@
     "providers": [
       {
         "id": "zai",
-        "authMethods": ["api-key"],
-        "envVars": ["ZAI_API_KEY", "Z_AI_API_KEY"]
+        "authMethods": [
+          "api-key"
+        ],
+        "envVars": [
+          "ZAI_API_KEY",
+          "Z_AI_API_KEY"
+        ]
       }
     ]
   },
@@ -37,7 +52,9 @@
             "id": "glm-5.1",
             "name": "GLM-5.1",
             "reasoning": true,
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "contextWindow": 202800,
             "maxTokens": 131100,
             "cost": {
@@ -51,7 +68,9 @@
             "id": "glm-5",
             "name": "GLM-5",
             "reasoning": true,
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "contextWindow": 202800,
             "maxTokens": 131100,
             "cost": {
@@ -65,7 +84,9 @@
             "id": "glm-5-turbo",
             "name": "GLM-5 Turbo",
             "reasoning": true,
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "contextWindow": 202800,
             "maxTokens": 131100,
             "cost": {
@@ -79,7 +100,10 @@
             "id": "glm-5v-turbo",
             "name": "GLM-5V Turbo",
             "reasoning": true,
-            "input": ["text", "image"],
+            "input": [
+              "text",
+              "image"
+            ],
             "contextWindow": 202800,
             "maxTokens": 131100,
             "cost": {
@@ -93,7 +117,9 @@
             "id": "glm-4.7",
             "name": "GLM-4.7",
             "reasoning": true,
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "contextWindow": 204800,
             "maxTokens": 131072,
             "cost": {
@@ -107,7 +133,9 @@
             "id": "glm-4.7-flash",
             "name": "GLM-4.7 Flash",
             "reasoning": true,
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "contextWindow": 200000,
             "maxTokens": 131072,
             "cost": {
@@ -121,7 +149,9 @@
             "id": "glm-4.7-flashx",
             "name": "GLM-4.7 FlashX",
             "reasoning": true,
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "contextWindow": 200000,
             "maxTokens": 128000,
             "cost": {
@@ -135,7 +165,9 @@
             "id": "glm-4.6",
             "name": "GLM-4.6",
             "reasoning": true,
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "contextWindow": 204800,
             "maxTokens": 131072,
             "cost": {
@@ -149,7 +181,10 @@
             "id": "glm-4.6v",
             "name": "GLM-4.6V",
             "reasoning": true,
-            "input": ["text", "image"],
+            "input": [
+              "text",
+              "image"
+            ],
             "contextWindow": 128000,
             "maxTokens": 32768,
             "cost": {
@@ -163,7 +198,9 @@
             "id": "glm-4.5",
             "name": "GLM-4.5",
             "reasoning": true,
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "contextWindow": 131072,
             "maxTokens": 98304,
             "cost": {
@@ -177,7 +214,9 @@
             "id": "glm-4.5-air",
             "name": "GLM-4.5 Air",
             "reasoning": true,
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "contextWindow": 131072,
             "maxTokens": 98304,
             "cost": {
@@ -191,7 +230,9 @@
             "id": "glm-4.5-flash",
             "name": "GLM-4.5 Flash",
             "reasoning": true,
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "contextWindow": 131072,
             "maxTokens": 98304,
             "cost": {
@@ -205,7 +246,10 @@
             "id": "glm-4.5v",
             "name": "GLM-4.5V",
             "reasoning": true,
-            "input": ["text", "image"],
+            "input": [
+              "text",
+              "image"
+            ],
             "contextWindow": 64000,
             "maxTokens": 16384,
             "cost": {
@@ -314,11 +358,15 @@
     }
   ],
   "contracts": {
-    "mediaUnderstandingProviders": ["zai"]
+    "mediaUnderstandingProviders": [
+      "zai"
+    ]
   },
   "mediaUnderstandingProviderMetadata": {
     "zai": {
-      "capabilities": ["image"],
+      "capabilities": [
+        "image"
+      ],
       "defaultModels": {
         "image": "glm-4.6v"
       },

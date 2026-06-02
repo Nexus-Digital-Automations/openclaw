@@ -4,7 +4,9 @@
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["kilocode"],
+  "providers": [
+    "kilocode"
+  ],
   "modelPricing": {
     "providers": {
       "kilocode": {
@@ -21,7 +23,9 @@
     "providers": [
       {
         "id": "kilocode",
-        "envVars": ["KILOCODE_API_KEY"]
+        "envVars": [
+          "KILOCODE_API_KEY"
+        ]
       }
     ]
   },
@@ -56,7 +60,10 @@
             "id": "kilo/auto",
             "name": "Kilo Auto",
             "reasoning": true,
-            "input": ["text", "image"],
+            "input": [
+              "text",
+              "image"
+            ],
             "cost": {
               "input": 0,
               "output": 0,
@@ -72,5 +79,11 @@
     "discovery": {
       "kilocode": "refreshable"
     }
+  },
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "kilocode"
+    ]
   }
 }

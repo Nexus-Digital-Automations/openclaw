@@ -51,6 +51,7 @@ import { resolveGlobalLane, resolveSessionLane } from "./lanes.js";
 import { log } from "./logger.js";
 import { readAgentModelContextTokens } from "./model-context-tokens.js";
 import { resolveModelAsync } from "./model.js";
+import { getPriorRunCorrelationId } from "./run-state.js";
 import type { EmbeddedAgentCompactResult } from "./types.js";
 import { normalizeContextTokenBudget } from "./utils.js";
 
@@ -403,8 +404,14 @@ export async function compactEmbeddedAgentSession(
         if (result.ok && result.compacted) {
           if (shouldRotateCompactionTranscript(params.config) && !delegatedRotatedTranscript) {
             try {
+              // D.7b — when the prior turn touched untrusted content, route
+              // the post-rotation transcript read through the purifier.
+              // Without this, a poisoned message that survives compaction
+              // reaches the next turn unfiltered.
+              const priorCorrelationId = getPriorRunCorrelationId(params.sessionId);
               const rotation = await rotateTranscriptFileAfterCompaction({
                 sessionFile: params.sessionFile,
+                ...(priorCorrelationId ? { priorCorrelationId, sessionId: params.sessionId } : {}),
               });
               if (rotation.rotated) {
                 postCompactionSessionId = rotation.sessionId ?? postCompactionSessionId;

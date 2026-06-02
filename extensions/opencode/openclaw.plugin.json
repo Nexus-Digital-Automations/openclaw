@@ -4,11 +4,15 @@
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["opencode"],
+  "providers": [
+    "opencode"
+  ],
   "providerEndpoints": [
     {
       "endpointClass": "opencode-native",
-      "hostSuffixes": ["opencode.ai"]
+      "hostSuffixes": [
+        "opencode.ai"
+      ]
     }
   ],
   "providerRequest": {
@@ -22,7 +26,10 @@
     "providers": [
       {
         "id": "opencode",
-        "envVars": ["OPENCODE_API_KEY", "OPENCODE_ZEN_API_KEY"]
+        "envVars": [
+          "OPENCODE_API_KEY",
+          "OPENCODE_ZEN_API_KEY"
+        ]
       }
     ]
   },
@@ -42,11 +49,15 @@
     }
   ],
   "contracts": {
-    "mediaUnderstandingProviders": ["opencode"]
+    "mediaUnderstandingProviders": [
+      "opencode"
+    ]
   },
   "mediaUnderstandingProviderMetadata": {
     "opencode": {
-      "capabilities": ["image"],
+      "capabilities": [
+        "image"
+      ],
       "defaultModels": {
         "image": "gpt-5-nano"
       }
@@ -56,5 +67,11 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {}
+  },
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "opencode"
+    ]
   }
 }

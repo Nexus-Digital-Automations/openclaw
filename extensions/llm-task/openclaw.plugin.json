@@ -1,5 +1,8 @@
 {
   "id": "llm-task",
+  "capabilities": {
+    "hooks": []
+  },
   "activation": {
     "onStartup": true
   },

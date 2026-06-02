@@ -4,12 +4,16 @@
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["synthetic"],
+  "providers": [
+    "synthetic"
+  ],
   "setup": {
     "providers": [
       {
         "id": "synthetic",
-        "envVars": ["SYNTHETIC_API_KEY"]
+        "envVars": [
+          "SYNTHETIC_API_KEY"
+        ]
       }
     ]
   },
@@ -32,5 +36,11 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {}
+  },
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "synthetic"
+    ]
   }
 }

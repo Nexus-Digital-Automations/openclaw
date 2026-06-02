@@ -62,6 +62,11 @@ export function createSecretsHandlers(params: {
       webSearch?: string;
       webFetch?: string;
     };
+    // G.3 — per-call session id, threaded from the gateway connection. Without
+    // this, concurrent RPC calls from different sessions would land in the
+    // process-global registry instead of per-session buckets, defeating the
+    // refuseCrossSessionRead gate.
+    sessionId?: string;
   }) => Promise<{
     assignments: Array<{
       path: string;
@@ -85,7 +90,7 @@ export function createSecretsHandlers(params: {
         respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "secrets.reload failed"));
       }
     },
-    "secrets.resolve": async ({ params: requestParams, respond }) => {
+    "secrets.resolve": async ({ params: requestParams, client, respond }) => {
       if (!validateSecretsResolveParams(requestParams)) {
         const field = invalidSecretsResolveField(validateSecretsResolveParams.errors);
         respond(
@@ -151,6 +156,10 @@ export function createSecretsHandlers(params: {
           ...(forcedActivePaths ? { forcedActivePaths } : {}),
           ...(optionalActivePaths ? { optionalActivePaths } : {}),
           ...(Object.keys(providerOverrides).length > 0 ? { providerOverrides } : {}),
+          // Per-WebSocket-connection bucket: client.connId is the OpenClaw
+          // unit of adversarial isolation. Two connections from the same user
+          // resolve into separate buckets — acceptable for defense-in-depth.
+          ...(client?.connId ? { sessionId: client.connId } : {}),
         });
         const payload = {
           ok: true,

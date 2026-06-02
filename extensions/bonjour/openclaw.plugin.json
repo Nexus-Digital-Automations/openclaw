@@ -3,7 +3,12 @@
   "activation": {
     "onStartup": true
   },
-  "enabledByDefaultOnPlatforms": ["darwin"],
+  "enabledByDefaultOnPlatforms": [
+    "darwin"
+  ],
+  "capabilities": {
+    "hooks": []
+  },
   "name": "Bonjour Gateway Discovery",
   "description": "Advertise the local OpenClaw gateway over Bonjour/mDNS.",
   "configSchema": {

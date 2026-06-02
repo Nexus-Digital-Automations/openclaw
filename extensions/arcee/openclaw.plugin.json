@@ -4,12 +4,16 @@
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["arcee"],
+  "providers": [
+    "arcee"
+  ],
   "setup": {
     "providers": [
       {
         "id": "arcee",
-        "envVars": ["ARCEEAI_API_KEY"]
+        "envVars": [
+          "ARCEEAI_API_KEY"
+        ]
       }
     ]
   },
@@ -47,5 +51,11 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {}
+  },
+  "capabilities": {
+    "hooks": [],
+    "providers": [
+      "arcee"
+    ]
   }
 }

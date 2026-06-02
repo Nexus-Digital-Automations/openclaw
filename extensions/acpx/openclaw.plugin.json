@@ -6,7 +6,9 @@
   "enabledByDefault": true,
   "name": "ACPX Runtime",
   "description": "OpenClaw ACP runtime backend with plugin-owned session and transport management.",
-  "skills": ["./skills"],
+  "skills": [
+    "./skills"
+  ],
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
@@ -25,11 +27,18 @@
       },
       "permissionMode": {
         "type": "string",
-        "enum": ["approve-all", "approve-reads", "deny-all"]
+        "enum": [
+          "approve-all",
+          "approve-reads",
+          "deny-all"
+        ]
       },
       "nonInteractivePermissions": {
         "type": "string",
-        "enum": ["deny", "fail"]
+        "enum": [
+          "deny",
+          "fail"
+        ]
       },
       "pluginToolsMcpBridge": {
         "type": "boolean"
@@ -49,10 +58,6 @@
         "type": "number",
         "minimum": 0
       },
-      "probeAgent": {
-        "type": "string",
-        "minLength": 1
-      },
       "mcpServers": {
         "type": "object",
         "additionalProperties": {
@@ -65,16 +70,22 @@
             },
             "args": {
               "type": "array",
-              "items": { "type": "string" },
+              "items": {
+                "type": "string"
+              },
               "description": "Arguments to pass to the command"
             },
             "env": {
               "type": "object",
-              "additionalProperties": { "type": "string" },
+              "additionalProperties": {
+                "type": "string"
+              },
               "description": "Environment variables for the MCP server"
             }
           },
-          "required": ["command"]
+          "required": [
+            "command"
+          ]
         }
       },
       "agents": {
@@ -88,10 +99,14 @@
             },
             "args": {
               "type": "array",
-              "items": { "type": "string" }
+              "items": {
+                "type": "string"
+              }
             }
           },
-          "required": ["command"]
+          "required": [
+            "command"
+          ]
         }
       }
     }
@@ -170,5 +185,10 @@
         }
       ]
     }
+  },
+  "capabilities": {
+    "hooks": [
+      "reply_dispatch"
+    ]
   }
 }

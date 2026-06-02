@@ -161,4 +161,25 @@ describe("before_tool_call external-content canary gate", () => {
     }
     expect(mockCallGateway).not.toHaveBeenCalled();
   });
+
+  // apply_patch writes attacker-controlled fresh bytes via its `*** Add File:`
+  // `+` body lines, so a tainted body there must trip the gate like exec/write.
+  it("fires the canary gate on apply_patch carrying a tainted body (report mode)", async () => {
+    recordExternalContentBody(TAINTED_BODY_A);
+
+    const outcome = await runBeforeToolCallHook({
+      toolName: "apply_patch",
+      params: {
+        input: `*** Begin Patch\n*** Add File: out.sh\n+${TAINTED_BODY_A}\n*** End Patch`,
+      },
+      approvalMode: "report",
+      ctx: { agentId: "main", sessionKey: "main" },
+    });
+
+    expect(outcome.blocked).toBe(true);
+    if (outcome.blocked) {
+      expect(outcome.deniedReason).toBe("plugin-approval");
+    }
+    expect(mockCallGateway).not.toHaveBeenCalled();
+  });
 });

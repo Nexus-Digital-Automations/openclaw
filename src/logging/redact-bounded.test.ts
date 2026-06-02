@@ -60,4 +60,27 @@ describe("replacePatternBounded", () => {
     const re = /(?=b)/g; // matches nothing; zero-width
     expect(replacePatternBounded(text, re, mask, CHUNKED)).toBe(text);
   });
+
+  // H1: a newline-spanning match (PEM private key) longer than the whole window
+  // never completes inside one window via matchAll, so it must run unbounded —
+  // otherwise the entire secret leaks. Body is > 2*chunkSize (32) and text is
+  // > chunkThreshold (24), forcing the chunked path's decision.
+  it("fully redacts a newline-spanning match larger than the window (PEM)", () => {
+    const pem = `-----BEGIN PRIVATE KEY-----\n${"K".repeat(80)}\n-----END PRIVATE KEY-----`;
+    const text = `${"x".repeat(40)}${pem}${"y".repeat(40)}`;
+    const re = /-----BEGIN PRIVATE KEY-----[\s\S]+?-----END PRIVATE KEY-----/g;
+    const out = replacePatternBounded(text, re, () => "[KEY]", CHUNKED);
+    expect(out).not.toContain("PRIVATE KEY");
+    expect(out).not.toContain("K".repeat(10));
+    expect(out).toBe(text.replace(re, () => "[KEY]"));
+  });
+
+  // H1: a greedy single-line match longer than the window is returned truncated
+  // at the window edge; it must be re-resolved against the full text, not clipped.
+  it("completes a greedy single-line match longer than the window", () => {
+    const run = "X".repeat(50); // > 2*chunkSize (32)
+    const text = `${"a".repeat(10)}${run}${"a".repeat(10)}`;
+    const re = /X+/g;
+    expect(replacePatternBounded(text, re, mask, CHUNKED)).toBe(text.replace(re, mask));
+  });
 });

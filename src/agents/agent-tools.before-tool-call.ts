@@ -246,14 +246,20 @@ function buildAdjustedParamsKey(params: { runId?: string; toolCallId: string }):
 // Exec-shaped tool names that get the external-content canary gate. Narrower
 // than `isLikelyMutatingToolName` (which includes `message`, `gateway`, etc.):
 // we only force operator approval for tools where embedding model-pasted
-// external content in argv is the dangerous case — shell execs and file
-// writes. `exec` mirrors `isExecToolName` in
+// external content in argv is the dangerous case — shell execs and fresh-content
+// file writers. `exec` mirrors `isExecToolName` in
 // pi-embedded-subscribe.handlers.tools.ts (the `bash` alias is folded into
-// `exec` by normalizeToolName before this gate runs); `write` mirrors the
-// fresh-content half of FILE_MUTATING_TOOL_NAMES in tool-mutation.ts (we omit
-// `edit` because that surface is scoped to existing content rather than
-// fresh attacker-controlled payload).
-const EXTERNAL_CONTENT_GATED_TOOL_NAMES: ReadonlySet<string> = new Set(["exec", "write"]);
+// `exec` by normalizeToolName before this gate runs); `write` and `apply_patch`
+// mirror the fresh-content half of FILE_MUTATING_TOOL_NAMES in tool-mutation.ts.
+// `apply_patch` carries attacker-controlled fresh bytes in its `*** Add File:` /
+// `+` body lines (see dangerous-tools.ts: "can rewrite arbitrary files"), so it
+// is the same threat class as `write`. We omit `edit` because that surface is
+// scoped to existing content rather than fresh attacker-controlled payload.
+const EXTERNAL_CONTENT_GATED_TOOL_NAMES: ReadonlySet<string> = new Set([
+  "exec",
+  "write",
+  "apply_patch",
+]);
 
 function isExternalContentGatedToolName(toolName: string): boolean {
   return EXTERNAL_CONTENT_GATED_TOOL_NAMES.has(toolName);

@@ -13,12 +13,14 @@ export const DEFAULT_GATEWAY_HTTP_TOOL_DENY = [
   "spawn",
   // Shell command execution — immediate RCE surface
   "shell",
-  // Arbitrary file mutation on the host
-  "fs_write",
-  // Arbitrary file deletion on the host
-  "fs_delete",
-  // Arbitrary file move/rename on the host
-  "fs_move",
+  // Background command sessions — drives long-running host processes
+  "process",
+  // Fresh-content file write — arbitrary file creation/overwrite on the host.
+  // Must be the canonical core tool id (`write`), not `fs_write`: the gateway
+  // filter is an exact `denySet.has(tool.name)` test, so a non-id never denies.
+  "write",
+  // Existing-content file edit — arbitrary file mutation on the host
+  "edit",
   // Patch application can rewrite arbitrary files
   "apply_patch",
   // Session orchestration — spawning agents remotely is RCE

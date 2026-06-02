@@ -40,6 +40,10 @@ export type PluginInstallSigningErrorCode =
 export type PluginSigningGateResult =
   | {
       ok: true;
+      // Canonical source-tree hash (canonicalPluginHashHex). Present on the
+      // signed path so the approval gate can pin to it without re-hashing;
+      // absent on the allowUnsigned bypass (which returns before hashing).
+      pluginHash?: string;
       publisherFingerprint?: string;
       // G.1 — capability manifest parsed from openclaw.plugin.json. Covered
       // by the same signed plugin_hash because openclaw.plugin.json lives in
@@ -145,6 +149,7 @@ export async function enforcePluginInstallSignature(
   }
   return {
     ok: true,
+    pluginHash,
     publisherFingerprint: sidecar.publisher.fingerprint,
     ...(capabilitiesResult.capabilities ? { capabilities: capabilitiesResult.capabilities } : {}),
   };

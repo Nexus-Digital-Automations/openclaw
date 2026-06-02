@@ -45,6 +45,8 @@ import { runCommandWithTimeout } from "../process/exec.js";
 import { createLazyImportLoader } from "../shared/lazy-promise.js";
 import { normalizeOptionalString } from "../shared/string-coerce.js";
 import { resolveUserPath } from "../utils.js";
+import type { PluginCapabilities } from "./capabilities.js";
+import type { ApprovedInstallFacts, PluginApprovalResolver } from "./install-approval.types.js";
 import {
   encodePluginInstallDirName,
   matchesExpectedPluginId,
@@ -129,7 +131,10 @@ export type PluginInstallErrorCode =
   | "plugin.install.signature_drift"
   | "plugin.install.capabilities_malformed"
   | "plugin.install.publisher_revoked"
-  | "plugin.install.publisher_policy";
+  | "plugin.install.publisher_policy"
+  // Track A install-approval gate codes.
+  | "plugin.install.approval_required"
+  | "plugin.install.approval_denied";
 
 export type InstallPluginResult =
   | {
@@ -141,6 +146,9 @@ export type InstallPluginResult =
       extensions: string[];
       npmResolution?: NpmSpecResolution;
       integrityDrift?: NpmIntegrityDrift;
+      // Track A — hash-pinned approval facts to persist on the install record.
+      // Absent for trusted-source/bundled installs (never gated).
+      approval?: ApprovedInstallFacts;
     }
   | { ok: false; error: string; code?: PluginInstallErrorCode };
 
@@ -965,6 +973,10 @@ type PackageInstallCommonParams = InstallSafetyOverrides & {
   expectedPluginId?: string;
   requirePluginManifest?: boolean;
   installPolicyRequest?: PluginInstallPolicyRequest;
+  // Track A — injected resolver the approval gate calls when a non-trusted
+  // external install needs human consent. Absent => fail closed (unless
+  // assumeApproved / a matching pinned approval).
+  approvalResolver?: PluginApprovalResolver;
 };
 
 type FileInstallCommonParams = Pick<
@@ -985,6 +997,10 @@ function pickPackageInstallCommonParams(
     dangerouslyForceUnsafeInstall: params.dangerouslyForceUnsafeInstall,
     trustedSourceLinkedOfficialInstall: params.trustedSourceLinkedOfficialInstall,
     allowUnsigned: params.allowUnsigned,
+    // Track A — these MUST be forwarded or the approval gate silently disables
+    // on a funnel hop (the #1 bypass risk).
+    assumeApproved: params.assumeApproved,
+    approvalResolver: params.approvalResolver,
     extensionsDir: params.extensionsDir,
     npmDir: params.npmDir,
     timeoutMs: params.timeoutMs,
@@ -1209,47 +1225,99 @@ async function applyInstallSigningGate(params: {
   sourceDir: string;
   pluginId: string;
   allowUnsigned: boolean;
+  trustedSourceLinkedOfficialInstall?: boolean;
+  assumeApproved?: boolean;
+  approvalResolver?: PluginApprovalResolver;
   logger: PluginInstallLogger;
-}): Promise<{ ok: true } | { ok: false; error: string; code: PluginInstallErrorCode }> {
+}): Promise<
+  | { ok: true; approval?: ApprovedInstallFacts }
+  | { ok: false; error: string; code: PluginInstallErrorCode }
+> {
   const enforcementEnabled = isPluginSigningEnforcementEnabled();
-  if (!enforcementEnabled && params.allowUnsigned) {
-    return { ok: true };
-  }
-  const { enforcePluginInstallSignature } = await import("./install-signing-gate.js");
-  // Resolve publisher policy here so it applies uniformly to every install
-  // source; wiring it per call site would leave bypass holes.
-  const pluginsCfg = getRuntimeConfig({ skipPluginValidation: true }).plugins;
-  const publisherPolicy = pluginsCfg?.publisherPolicy;
-  const requirePublisher = pluginsCfg?.entries?.[params.pluginId]?.requirePublisher;
-  const signingResult = await enforcePluginInstallSignature({
-    packageDir: params.sourceDir,
-    pluginId: params.pluginId,
-    allowUnsigned: params.allowUnsigned,
-    ...(publisherPolicy ? { publisherPolicy } : {}),
-    ...(requirePublisher ? { requirePublisher } : {}),
-  });
-  if (!signingResult.ok) {
-    const isMissingOnly = signingResult.code === "plugin.install.unsigned";
-    if (!enforcementEnabled && isMissingOnly) {
+  let signingFacts: {
+    pluginHash?: string;
+    publisherFingerprint?: string;
+    capabilities?: PluginCapabilities;
+  } = {};
+
+  // Signing checks run unless unsigned is explicitly allowed with enforcement
+  // off. They never short-circuit the approval gate below — consent is
+  // orthogonal to signature trust.
+  if (enforcementEnabled || !params.allowUnsigned) {
+    const { enforcePluginInstallSignature } = await import("./install-signing-gate.js");
+    // Resolve publisher policy here so it applies uniformly to every install
+    // source; wiring it per call site would leave bypass holes.
+    const pluginsCfg = getRuntimeConfig({ skipPluginValidation: true }).plugins;
+    const publisherPolicy = pluginsCfg?.publisherPolicy;
+    const requirePublisher = pluginsCfg?.entries?.[params.pluginId]?.requirePublisher;
+    const signingResult = await enforcePluginInstallSignature({
+      packageDir: params.sourceDir,
+      pluginId: params.pluginId,
+      allowUnsigned: params.allowUnsigned,
+      ...(publisherPolicy ? { publisherPolicy } : {}),
+      ...(requirePublisher ? { requirePublisher } : {}),
+    });
+    if (!signingResult.ok) {
+      const isMissingOnly = signingResult.code === "plugin.install.unsigned";
+      if (enforcementEnabled || !isMissingOnly) {
+        params.logger.warn?.(
+          `plugin install refused: ${signingResult.code} ${signingResult.reason}`,
+        );
+        return { ok: false, error: signingResult.reason, code: signingResult.code };
+      }
+      // Soft-rollout: a missing sidecar only warns; fall through to approval as
+      // an unsigned (publisher-less) install.
       params.logger.warn?.(
         `plugin "${params.pluginId}" has no openclaw.plugin.sig sidecar; install proceeding (set OPENCLAW_REQUIRE_SIGNED_PLUGINS=1 to enforce)`,
       );
-      return { ok: true };
+    } else {
+      signingFacts = {
+        ...(signingResult.pluginHash ? { pluginHash: signingResult.pluginHash } : {}),
+        ...(signingResult.publisherFingerprint
+          ? { publisherFingerprint: signingResult.publisherFingerprint }
+          : {}),
+        ...(signingResult.capabilities ? { capabilities: signingResult.capabilities } : {}),
+      };
+      if (signingResult.capabilities) {
+        // C.2 — publish the verified capability surface so the hook gate (C.3)
+        // and HTTP/FS guards (E) can read it. F.4 — an explicit install is
+        // external; opt it into the hard-block gate now rather than wait for
+        // load-time hydration.
+        const { setPluginCapabilities, setPluginCapabilityEnforcement } =
+          await import("./capabilities.js");
+        setPluginCapabilities(params.pluginId, signingResult.capabilities);
+        setPluginCapabilityEnforcement(params.pluginId, "enforced");
+      }
     }
-    params.logger.warn?.(`plugin install refused: ${signingResult.code} ${signingResult.reason}`);
-    return { ok: false, error: signingResult.reason, code: signingResult.code };
   }
-  if (signingResult.capabilities) {
-    // C.2 — publish the verified capability surface so the hook gate (C.3) and
-    // HTTP/FS guards (E) can read it. F.4 — an explicit install is external;
-    // opt it into the hard-block gate now rather than wait for load-time
-    // hydration.
-    const { setPluginCapabilities, setPluginCapabilityEnforcement } =
-      await import("./capabilities.js");
-    setPluginCapabilities(params.pluginId, signingResult.capabilities);
-    setPluginCapabilityEnforcement(params.pluginId, "enforced");
+
+  // Track A — human approval gate. Dormant by default (rollout flag, mirroring
+  // the signing rollout); when enabled it runs for every non-trusted external
+  // install regardless of signing outcome, and itself exempts trusted sources.
+  const { applyInstallApprovalGate, isInstallApprovalEnabled } =
+    await import("./install-approval.js");
+  if (!isInstallApprovalEnabled()) {
+    return { ok: true };
   }
-  return { ok: true };
+  const approval = await applyInstallApprovalGate({
+    sourceDir: params.sourceDir,
+    pluginId: params.pluginId,
+    logger: params.logger,
+    ...(signingFacts.pluginHash ? { pluginHash: signingFacts.pluginHash } : {}),
+    ...(signingFacts.publisherFingerprint
+      ? { publisherFingerprint: signingFacts.publisherFingerprint }
+      : {}),
+    ...(signingFacts.capabilities ? { capabilities: signingFacts.capabilities } : {}),
+    ...(params.trustedSourceLinkedOfficialInstall
+      ? { trustedSourceLinkedOfficialInstall: true }
+      : {}),
+    ...(params.assumeApproved ? { assumeApproved: true } : {}),
+    ...(params.approvalResolver ? { approvalResolver: params.approvalResolver } : {}),
+  });
+  if (!approval.ok) {
+    return { ok: false, error: approval.reason, code: approval.code };
+  }
+  return { ok: true, ...(approval.approval ? { approval: approval.approval } : {}) };
 }
 
 async function installBundleFromSourceDir(
@@ -1324,13 +1392,18 @@ async function installBundleFromSourceDir(
     sourceDir: params.sourceDir,
     pluginId,
     allowUnsigned: params.allowUnsigned === true || params.dangerouslyForceUnsafeInstall === true,
+    ...(params.trustedSourceLinkedOfficialInstall
+      ? { trustedSourceLinkedOfficialInstall: true }
+      : {}),
+    ...(params.assumeApproved ? { assumeApproved: true } : {}),
+    ...(params.approvalResolver ? { approvalResolver: params.approvalResolver } : {}),
     logger,
   });
   if (!bundleSigningGate.ok) {
     return { ok: false, error: bundleSigningGate.error, code: bundleSigningGate.code };
   }
 
-  return await installPluginDirectoryIntoExtensions({
+  const bundleResult = await installPluginDirectoryIntoExtensions({
     sourceDir: params.sourceDir,
     pluginId,
     manifestName: manifestRes.manifest.name,
@@ -1346,6 +1419,9 @@ async function installBundleFromSourceDir(
     hasDeps: false,
     depsLogMessage: "",
   });
+  return bundleResult.ok && bundleSigningGate.approval
+    ? { ...bundleResult, approval: bundleSigningGate.approval }
+    : bundleResult;
 }
 
 async function installPluginFromSourceDir(
@@ -1708,6 +1784,11 @@ async function installPluginFromPackageDir(
     sourceDir: params.packageDir,
     pluginId: plugin.pluginId,
     allowUnsigned: params.allowUnsigned === true || params.dangerouslyForceUnsafeInstall === true,
+    ...(params.trustedSourceLinkedOfficialInstall
+      ? { trustedSourceLinkedOfficialInstall: true }
+      : {}),
+    ...(params.assumeApproved ? { assumeApproved: true } : {}),
+    ...(params.approvalResolver ? { approvalResolver: params.approvalResolver } : {}),
     logger,
   });
   if (!packageSigningGate.ok) {
@@ -1717,7 +1798,7 @@ async function installPluginFromPackageDir(
   preparedTarget = await resolvePreparedTargetForPluginId(plugin.pluginId);
   const hasBundleManifest = Boolean(runtime.detectBundleManifestFormat(params.packageDir));
 
-  return await installPluginDirectoryIntoExtensions({
+  const packageResult = await installPluginDirectoryIntoExtensions({
     sourceDir: params.packageDir,
     pluginId: plugin.pluginId,
     manifestName: plugin.manifestName,
@@ -1748,6 +1829,9 @@ async function installPluginFromPackageDir(
       });
     },
   });
+  return packageResult.ok && packageSigningGate.approval
+    ? { ...packageResult, approval: packageSigningGate.approval }
+    : packageResult;
 }
 
 export async function installPluginFromArchive(

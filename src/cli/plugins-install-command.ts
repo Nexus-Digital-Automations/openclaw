@@ -2,14 +2,17 @@ import fs from "node:fs";
 import { collectChannelDoctorStaleConfigMutations } from "../commands/doctor/shared/channel-doctor.js";
 import { assertConfigWriteAllowedInCurrentMode, readConfigFileSnapshot } from "../config/config.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
+import { isYes } from "../globals.js";
 import { installHooksFromNpmSpec, installHooksFromPath } from "../hooks/install.js";
 import { resolveArchiveKind } from "../infra/archive.js";
 import { parseClawHubPluginSpec } from "../infra/clawhub.js";
 import { formatErrorMessage } from "../infra/errors.js";
 import { type BundledPluginSource, findBundledPluginSource } from "../plugins/bundled-sources.js";
+import type { PluginCapabilities } from "../plugins/capabilities.js";
 import { buildClawHubPluginInstallRecordFields } from "../plugins/clawhub-install-records.js";
 import { installPluginFromClawHub } from "../plugins/clawhub.js";
 import { installPluginFromGitSpec, parseGitPluginSpec } from "../plugins/git-install.js";
+import type { PluginApprovalResolver } from "../plugins/install-approval.types.js";
 import { resolveDefaultPluginExtensionsDir } from "../plugins/install-paths.js";
 import type { InstallSafetyOverrides } from "../plugins/install-security-scan.js";
 import {
@@ -56,6 +59,7 @@ import {
 } from "./plugins-command-helpers.js";
 import { persistHookPackInstall, persistPluginInstall } from "./plugins-install-persist.js";
 import type { ConfigSnapshotForInstallPersist } from "./plugins-install-persist.js";
+import { promptYesNo } from "./prompt.js";
 
 function resolveInstallMode(force?: boolean): "install" | "update" {
   return force ? "update" : "install";
@@ -64,6 +68,62 @@ function resolveInstallMode(force?: boolean): "install" | "update" {
 function resolveInstallSafetyOverrides(overrides: InstallSafetyOverrides): InstallSafetyOverrides {
   return {
     dangerouslyForceUnsafeInstall: overrides.dangerouslyForceUnsafeInstall,
+  };
+}
+
+function describeApprovalCapabilities(capabilities: PluginCapabilities): string {
+  const parts: string[] = [];
+  if (capabilities.hooks?.length) {
+    parts.push(`${capabilities.hooks.length} hook(s)`);
+  }
+  if (capabilities.providers?.length) {
+    parts.push(`${capabilities.providers.length} provider(s)`);
+  }
+  if (capabilities.tools?.length) {
+    parts.push(`${capabilities.tools.length} tool(s)`);
+  }
+  if (capabilities.channels?.length) {
+    parts.push(`${capabilities.channels.length} channel(s)`);
+  }
+  if (capabilities.httpAllowlist?.length) {
+    parts.push(`http: ${capabilities.httpAllowlist.join(", ")}`);
+  }
+  if (capabilities.fsScopes?.length) {
+    parts.push(`${capabilities.fsScopes.length} fs scope(s)`);
+  }
+  return parts.length > 0 ? parts.join("; ") : "none declared";
+}
+
+// The interactive approval resolver for `openclaw plugins install`. Returned
+// only when stdin is a TTY; otherwise the install gate fails closed and the
+// operator must pass --yes. Renders the trust + capability surface, then asks.
+function buildInstallApprovalResolver(runtime: RuntimeEnv): PluginApprovalResolver | undefined {
+  if (!process.stdin.isTTY) {
+    return undefined;
+  }
+  return async (context) => {
+    const trustLine =
+      context.trust === "trusted-publisher"
+        ? `  publisher: ${context.publisherFingerprint ?? "unknown"} (signature verified)`
+        : "  publisher: UNSIGNED (no signature)";
+    const capabilitiesLine = `  capabilities: ${
+      context.capabilities ? describeApprovalCapabilities(context.capabilities) : "none declared"
+    }`;
+    const upgradeLine = context.isUpgrade
+      ? "  note: a different version was previously approved"
+      : "";
+    runtime.log(
+      [
+        `Install third-party plugin "${context.pluginId}"? It will run with full host access.`,
+        trustLine,
+        capabilitiesLine,
+        upgradeLine,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    );
+    const approved = await promptYesNo(`Approve installing "${context.pluginId}"?`);
+    return approved ? { kind: "approved" } : { kind: "denied", reason: "declined at prompt" };
   };
 }
 
@@ -377,6 +437,7 @@ async function tryInstallPluginOrHookPackFromNpmSpec(params: {
     snapshot: params.snapshot,
     pluginId: result.pluginId,
     install: installRecord,
+    approval: result.approval,
     runtime: params.runtime,
   });
   return { ok: true };
@@ -425,6 +486,7 @@ async function tryInstallPluginFromNpmPackArchive(params: {
       ...(result.npmResolution?.shasum ? { npmShasum: result.npmResolution.shasum } : {}),
       ...(result.npmTarballName ? { npmTarballName: result.npmTarballName } : {}),
     },
+    approval: result.approval,
     runtime: params.runtime,
   });
   return { ok: true };
@@ -463,6 +525,7 @@ async function tryInstallPluginFromGitSpec(params: {
       gitRef: result.git.ref,
       gitCommit: result.git.commit,
     },
+    approval: result.approval,
     runtime: params.runtime,
   });
   return { ok: true };
@@ -471,7 +534,11 @@ async function tryInstallPluginFromGitSpec(params: {
 function isTerminalPluginInstallSecurityFailure(code?: string): boolean {
   return (
     code === PLUGIN_INSTALL_ERROR_CODE.SECURITY_SCAN_BLOCKED ||
-    code === PLUGIN_INSTALL_ERROR_CODE.SECURITY_SCAN_FAILED
+    code === PLUGIN_INSTALL_ERROR_CODE.SECURITY_SCAN_FAILED ||
+    // Track A — a denied or required approval is final; do not fall back to a
+    // hook-driven install path that would re-attempt the write.
+    code === "plugin.install.approval_required" ||
+    code === "plugin.install.approval_denied"
   );
 }
 
@@ -568,6 +635,7 @@ export async function runPluginInstallCommand(params: {
     link?: boolean;
     pin?: boolean;
     marketplace?: string;
+    yes?: boolean;
   };
   runtime?: RuntimeEnv;
 }) {
@@ -650,7 +718,16 @@ export async function runPluginInstallCommand(params: {
   }
   const cfg = snapshot.config;
   const installMode = resolveInstallMode(opts.force);
-  const safetyOverrides = resolveInstallSafetyOverrides(opts);
+  // Track A — approval controls flow through the single safetyOverrides object
+  // that every install call spreads, so the gate reaches all sources with no
+  // bypass. `--yes` (global) assumes approval; a TTY gets an interactive
+  // resolver; a non-TTY without --yes gets neither and the gate fails closed.
+  const approvalResolver = buildInstallApprovalResolver(runtime);
+  const safetyOverrides: InstallSafetyOverrides & { approvalResolver?: PluginApprovalResolver } = {
+    ...resolveInstallSafetyOverrides(opts),
+    ...(isYes() || opts.yes ? { assumeApproved: true } : {}),
+    ...(approvalResolver ? { approvalResolver } : {}),
+  };
   const extensionsDir = resolveDefaultPluginExtensionsDir();
 
   if (opts.marketplace) {
@@ -678,6 +755,7 @@ export async function runPluginInstallCommand(params: {
         marketplaceSource: result.marketplaceSource,
         marketplacePlugin: result.marketplacePlugin,
       },
+      approval: result.approval,
       runtime,
     });
     return;
@@ -737,6 +815,7 @@ export async function runPluginInstallCommand(params: {
           installPath: resolved,
           version: probe.version,
         },
+        approval: probe.approval,
         successMessage: `Linked plugin path: ${shortenHomePath(resolved)}`,
         runtime,
       });
@@ -779,6 +858,7 @@ export async function runPluginInstallCommand(params: {
         installPath: result.targetDir,
         version: result.version,
       },
+      approval: result.approval,
       runtime,
     });
     return;
@@ -965,6 +1045,7 @@ export async function runPluginInstallCommand(params: {
         spec: raw,
         installPath: result.targetDir,
       },
+      approval: result.approval,
       runtime,
     });
     return;

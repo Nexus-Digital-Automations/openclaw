@@ -42,6 +42,9 @@ export const InstallRecordShape = {
   gitRef: z.string().optional(),
   gitCommit: z.string().optional(),
   capabilityGate: z.union([z.literal("enforced"), z.literal("grandfathered")]).optional(),
+  approvedHash: z.string().optional(),
+  approvedAt: z.string().optional(),
+  approvedPublisherFingerprint: z.string().optional(),
 } as const;
 
 export const PluginInstallRecordShape = {

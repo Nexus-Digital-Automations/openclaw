@@ -153,6 +153,11 @@ export function registerPluginsCli(program: Command) {
       "--marketplace <source>",
       "Install a Claude marketplace plugin from a local repo/path or git/GitHub source",
     )
+    .option(
+      "-y, --yes",
+      "Approve installing the (external) plugin without an interactive prompt",
+      false,
+    )
     .action(
       async (
         raw: string,
@@ -162,6 +167,7 @@ export function registerPluginsCli(program: Command) {
           link?: boolean;
           pin?: boolean;
           marketplace?: string;
+          yes?: boolean;
         },
       ) => {
         const { runPluginsInstallAction } = await import("./plugins-cli.runtime.js");

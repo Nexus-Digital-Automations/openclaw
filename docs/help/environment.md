@@ -229,6 +229,19 @@ control it; signing is dormant unless you set them.
   time. Never commit a private key. With no key the signing step is a clean
   no-op (bundled plugins ship unsigned, dormant).
 
+## Plugin install approval
+
+- **`OPENCLAW_REQUIRE_PLUGIN_APPROVAL`** (runtime, default off) — set to `1`,
+  `true`, or `yes` to require explicit user approval before installing a
+  third-party (non-first-party) plugin. When on, `openclaw plugins install`
+  shows the plugin's declared capabilities and publisher trust and asks for
+  confirmation; `--yes` (or the global `--yes`) approves without a prompt; the
+  approval is pinned to the plugin's canonical hash so reinstalling the same
+  version does not re-prompt, and a changed version re-prompts. In a
+  non-interactive context (no TTY) without `--yes`, the install fails closed.
+  Official/first-party installs are exempt. While unset, installs behave as
+  before (the gate is dormant).
+
 ## Related
 
 - [Gateway configuration](/gateway/configuration)

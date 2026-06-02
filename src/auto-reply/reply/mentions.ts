@@ -12,6 +12,7 @@ import { normalizeAnyChannelId } from "../../channels/registry.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
 import { compileConfigRegexes, type ConfigRegexRejectReason } from "../../security/config-regex.js";
+import { testRegexWithBoundedInput } from "../../security/safe-regex.js";
 import { escapeRegExp } from "../../utils.js";
 import type { MsgContext } from "../templating.js";
 import type { BuildMentionRegexesOptions, ExplicitMentionSignal } from "./mentions.types.js";
@@ -156,7 +157,9 @@ export function matchesMentionPatterns(text: string, mentionRegexes: RegExp[]): 
     return false;
   }
   const cleaned = normalizeMentionText(text ?? "");
-  return mentionRegexes.some((re) => re.test(cleaned));
+  // Bound the input window: mentionRegexes include user-configured patterns and
+  // `text` is attacker-controlled, so an unbounded `.test` is a ReDoS vector.
+  return mentionRegexes.some((re) => testRegexWithBoundedInput(re, cleaned));
 }
 
 export function matchesMentionWithExplicit(params: {
@@ -172,7 +175,7 @@ export function matchesMentionWithExplicit(params: {
   const transcriptCleaned = params.transcript ? normalizeMentionText(params.transcript) : "";
   const textToCheck = cleaned || transcriptCleaned;
 
-  return explicit || params.mentionRegexes.some((re) => re.test(textToCheck));
+  return explicit || params.mentionRegexes.some((re) => testRegexWithBoundedInput(re, textToCheck));
 }
 
 export function stripStructuralPrefixes(text: string): string {

@@ -22,6 +22,19 @@ describe("safe regex", () => {
     ["^(?:foo|bar)$", false],
     ["^(ab|cd)+$", false],
     [String.raw`([\w]|[-.])+@([\w]|[-.])+\.\w+`, false],
+    // M6: equal-length but overlapping alternation under an unbounded quantifier
+    // — the length model alone treats it as unambiguous and missed it.
+    ["(a|a)+$", true],
+    [String.raw`(\d|\d\d)+`, true],
+    // M7: adjacent unbounded quantifiers over overlapping character sets.
+    [String.raw`\d+\d+`, true],
+    [".*.*", true],
+    [String.raw`\w+\w+`, true],
+    // Must stay safe: disjoint alternation branches and disjoint adjacency.
+    ["(abc|def)+$", false],
+    [String.raw`\d+[a-z]+`, false],
+    [String.raw`\d+\s+\w+`, false],
+    [".*x.*", false],
   ] as const)("classifies nested repetition for %s", (pattern, expected) => {
     expect(hasNestedRepetition(pattern)).toBe(expected);
   });

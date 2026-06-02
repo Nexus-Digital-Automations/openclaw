@@ -7,8 +7,21 @@ type QuantifierRead = {
 type TokenState = {
   containsRepetition: boolean;
   hasAmbiguousAlternation: boolean;
+  // Whether this token is an alternation group whose branches can match the same
+  // first character — equal-length-but-overlapping branches (e.g. `(a|a)`) that
+  // the length model alone treats as unambiguous but cause exponential ReDoS
+  // under an unbounded quantifier.
+  hasOverlappingAlternation: boolean;
   minLength: number;
   maxLength: number;
+  // Character signature of the single character this token can begin with, used
+  // to detect overlap between adjacent unbounded quantifiers (`\d+\d+`, `.*.*`).
+  // Empty for groups/multi-shape tokens, which are treated as non-overlapping.
+  sig: string;
+  // Set when the immediately-preceding token was quantified with an unbounded
+  // upper bound; carries that token's sig so a second unbounded quantifier here
+  // can detect overlap.
+  precedingUnboundedSig: string | null;
 };
 
 type ParseFrame = {
@@ -19,10 +32,17 @@ type ParseFrame = {
   branchMaxLength: number;
   altMinLength: number | null;
   altMaxLength: number | null;
+  // First-character sig of the current alternation branch, and the collected
+  // first-sigs of all branches seen so far, for overlap detection on close.
+  branchFirstSig: string | null;
+  branchFirstSigs: string[];
+  // Sig of the most recent token quantified with an unbounded upper bound, so an
+  // adjacent unbounded quantifier can detect overlap.
+  lastUnboundedSig: string | null;
 };
 
 type PatternToken =
-  | { kind: "simple-token" }
+  | { kind: "simple-token"; sig: string }
   | { kind: "group-open" }
   | { kind: "group-close" }
   | { kind: "alternation" }
@@ -57,7 +77,49 @@ function createParseFrame(): ParseFrame {
     branchMaxLength: 0,
     altMinLength: null,
     altMaxLength: null,
+    branchFirstSig: null,
+    branchFirstSigs: [],
+    lastUnboundedSig: null,
   };
+}
+
+// Whether two single-character signatures can match the same character. Sound
+// (no false negatives) for identity; `.` matches anything; `\w` is a superset of
+// `\d`. Conservative elsewhere — two distinct literals/classes are treated as
+// disjoint, so legitimate patterns like `\d+[a-z]+` or `(foo|bar)+` are not
+// rejected. Empty sig (groups) never overlaps.
+function sigsOverlap(a: string | null, b: string | null): boolean {
+  if (!a || !b) {
+    return false;
+  }
+  if (a === b) {
+    return true;
+  }
+  if (a === "." || b === ".") {
+    return true;
+  }
+  const broad = new Set(["\\w", "\\W", "\\S"]);
+  if ((a === "\\w" && b === "\\d") || (b === "\\w" && a === "\\d")) {
+    return true;
+  }
+  return broad.has(a) && broad.has(b);
+}
+
+// Read a `[...]` class span starting at `[` (index points at `[`), respecting
+// `\]`. Returns the full source slice so two identical classes share a sig.
+function readCharClassSpan(source: string, openIndex: number): string {
+  let i = openIndex + 1;
+  while (i < source.length) {
+    if (source[i] === "\\") {
+      i += 2;
+      continue;
+    }
+    if (source[i] === "]") {
+      return source.slice(openIndex, i + 1);
+    }
+    i += 1;
+  }
+  return source.slice(openIndex);
 }
 
 function addLength(left: number, right: number): number {
@@ -153,13 +215,13 @@ function tokenizePattern(source: string): PatternToken[] {
 
     if (ch === "\\") {
       i += 1;
-      tokens.push({ kind: "simple-token" });
+      tokens.push({ kind: "simple-token", sig: `\\${source[i] ?? ""}` });
       continue;
     }
 
     if (ch === "[") {
       inCharClass = true;
-      tokens.push({ kind: "simple-token" });
+      tokens.push({ kind: "simple-token", sig: readCharClassSpan(source, i) });
       continue;
     }
 
@@ -185,10 +247,21 @@ function tokenizePattern(source: string): PatternToken[] {
       continue;
     }
 
-    tokens.push({ kind: "simple-token" });
+    tokens.push({ kind: "simple-token", sig: ch });
   }
 
   return tokens;
+}
+
+function anyBranchSigsOverlap(sigs: readonly string[]): boolean {
+  for (let i = 0; i < sigs.length; i += 1) {
+    for (let j = i + 1; j < sigs.length; j += 1) {
+      if (sigsOverlap(sigs[i], sigs[j])) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 function analyzeTokensForNestedRepetition(tokens: PatternToken[]): boolean {
@@ -196,6 +269,13 @@ function analyzeTokensForNestedRepetition(tokens: PatternToken[]): boolean {
 
   const emitToken = (token: TokenState) => {
     const frame = frames[frames.length - 1];
+    // Adjacency for `\d+\d+`: this token inherits the sig of the immediately
+    // preceding unbounded quantifier exactly once, then the carry is cleared.
+    token.precedingUnboundedSig = frame.lastUnboundedSig;
+    frame.lastUnboundedSig = null;
+    if (frame.branchFirstSig === null) {
+      frame.branchFirstSig = token.sig;
+    }
     frame.lastToken = token;
     if (token.containsRepetition) {
       frame.containsRepetition = true;
@@ -204,18 +284,21 @@ function analyzeTokensForNestedRepetition(tokens: PatternToken[]): boolean {
     frame.branchMaxLength = addLength(frame.branchMaxLength, token.maxLength);
   };
 
-  const emitSimpleToken = () => {
+  const emitSimpleToken = (sig: string) => {
     emitToken({
       containsRepetition: false,
       hasAmbiguousAlternation: false,
+      hasOverlappingAlternation: false,
       minLength: 1,
       maxLength: 1,
+      sig,
+      precedingUnboundedSig: null,
     });
   };
 
   for (const token of tokens) {
     if (token.kind === "simple-token") {
-      emitSimpleToken();
+      emitSimpleToken(token.sig);
       continue;
     }
 
@@ -229,6 +312,7 @@ function analyzeTokensForNestedRepetition(tokens: PatternToken[]): boolean {
         const frame = frames.pop() as ParseFrame;
         if (frame.hasAlternation) {
           recordAlternative(frame);
+          frame.branchFirstSigs.push(frame.branchFirstSig ?? "");
         }
         const groupMinLength = frame.hasAlternation
           ? (frame.altMinLength ?? 0)
@@ -243,8 +327,12 @@ function analyzeTokensForNestedRepetition(tokens: PatternToken[]): boolean {
             frame.altMinLength !== null &&
             frame.altMaxLength !== null &&
             frame.altMinLength !== frame.altMaxLength,
+          hasOverlappingAlternation:
+            frame.hasAlternation && anyBranchSigsOverlap(frame.branchFirstSigs),
           minLength: groupMinLength,
           maxLength: groupMaxLength,
+          sig: "", // a group's single-char start is unknown; treated as non-overlapping
+          precedingUnboundedSig: null,
         });
       }
       continue;
@@ -254,6 +342,8 @@ function analyzeTokensForNestedRepetition(tokens: PatternToken[]): boolean {
       const frame = frames[frames.length - 1];
       frame.hasAlternation = true;
       recordAlternative(frame);
+      frame.branchFirstSigs.push(frame.branchFirstSig ?? "");
+      frame.branchFirstSig = null;
       frame.branchMinLength = 0;
       frame.branchMaxLength = 0;
       frame.lastToken = null;
@@ -265,11 +355,26 @@ function analyzeTokensForNestedRepetition(tokens: PatternToken[]): boolean {
     if (!previousToken) {
       continue;
     }
+    const unbounded = token.quantifier.maxRepeat === null;
     if (previousToken.containsRepetition) {
       return true;
     }
-    if (previousToken.hasAmbiguousAlternation && token.quantifier.maxRepeat === null) {
+    if (previousToken.hasAmbiguousAlternation && unbounded) {
       return true;
+    }
+    // M6: equal-length-but-overlapping alternation under an unbounded quantifier
+    // (e.g. `(a|a)+`) — the length model treats it as unambiguous, but the shared
+    // first character drives exponential backtracking.
+    if (previousToken.hasOverlappingAlternation && unbounded) {
+      return true;
+    }
+    // M7: two adjacent unbounded quantifiers over overlapping character sets
+    // (`\d+\d+`, `.*.*`) — polynomial backtracking the length model misses.
+    if (unbounded && sigsOverlap(previousToken.precedingUnboundedSig, previousToken.sig)) {
+      return true;
+    }
+    if (unbounded) {
+      frame.lastUnboundedSig = previousToken.sig;
     }
 
     const previousMinLength = previousToken.minLength;

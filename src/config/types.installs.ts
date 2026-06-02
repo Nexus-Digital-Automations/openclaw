@@ -31,4 +31,12 @@ export type InstallRecordBase = {
   // = new external install subject to the hard-block hook gate; absent or
   // "grandfathered" = warn-mode (bundled + installs predating the gate flip).
   capabilityGate?: "enforced" | "grandfathered";
+  // Install-approval pin (Track A). The canonical plugin hash the user approved,
+  // when it was approved, and the publisher fingerprint at approval time. On a
+  // later install/upgrade the gate re-prompts unless the new hash equals
+  // `approvedHash`. Absent for trusted-source/bundled installs (never gated) and
+  // for records predating the approval gate.
+  approvedHash?: string;
+  approvedAt?: string;
+  approvedPublisherFingerprint?: string;
 };

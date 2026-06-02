@@ -116,11 +116,23 @@ openclaw plugins install <path>                         # local path
 openclaw plugins install <plugin>@<marketplace>         # marketplace
 openclaw plugins install <plugin> --marketplace <name>  # marketplace (explicit)
 openclaw plugins install <plugin> --marketplace https://github.com/<owner>/<repo>
+openclaw plugins install <package> --yes                # approve a third-party install without prompting
 ```
 
 Maintainers testing setup-time installs can override automatic plugin install
 sources with guarded environment variables. See
 [Plugin install overrides](/plugins/install-overrides).
+
+When `OPENCLAW_REQUIRE_PLUGIN_APPROVAL` is enabled, installing a third-party
+(non-first-party) plugin requires explicit approval: the command shows the
+plugin's declared capabilities and publisher trust and asks to confirm. The
+approval is pinned to the plugin's canonical hash and recorded in the plugin
+index (`approvedHash`/`approvedAt`/`approvedPublisherFingerprint`), so
+reinstalling the same version does not re-prompt and a changed version
+re-prompts. Pass `--yes` (or the global `--yes`) to approve without a prompt; in
+a non-interactive context without `--yes` the install fails closed. The gate is
+dormant unless the variable is set. See
+[Environment variables](/help/environment#plugin-install-approval).
 
 <Warning>
 Bare package names install from npm by default during the launch cutover, unless they match an official plugin id. Raw `@openclaw/*` package specs that match bundled plugins use the bundled copy that shipped with the current OpenClaw build. Use `npm:<package>` when you deliberately want an external npm package instead. Use `clawhub:<package>` for ClawHub. Treat plugin installs like running code. Prefer pinned versions.

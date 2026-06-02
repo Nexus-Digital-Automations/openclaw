@@ -5,6 +5,7 @@ import type { PluginInstallRecord } from "../config/types.plugins.js";
 import { type HookInstallUpdate, recordHookInstall } from "../hooks/installs.js";
 import { isPathInside } from "../infra/path-guards.js";
 import { enablePluginInConfig } from "../plugins/enable.js";
+import type { ApprovedInstallFacts } from "../plugins/install-approval.types.js";
 import {
   loadInstalledPluginIndexInstallRecords,
   recordPluginInstallInRecords,
@@ -183,6 +184,9 @@ export async function persistPluginInstall(params: {
   snapshot: ConfigSnapshotForInstallPersist;
   pluginId: string;
   install: Omit<PluginInstallUpdate, "pluginId">;
+  // Track A — hash-pinned approval facts from the install result, merged into
+  // the persisted record so a later install of the same hash skips the prompt.
+  approval?: ApprovedInstallFacts;
   enable?: boolean;
   successMessage?: string;
   warningMessage?: string;
@@ -215,6 +219,15 @@ export async function persistPluginInstall(params: {
   const nextInstallRecords = recordPluginInstallInRecords(installRecords, {
     pluginId: params.pluginId,
     ...params.install,
+    ...(params.approval
+      ? {
+          approvedHash: params.approval.approvedHash,
+          approvedAt: params.approval.approvedAt,
+          ...(params.approval.approvedPublisherFingerprint
+            ? { approvedPublisherFingerprint: params.approval.approvedPublisherFingerprint }
+            : {}),
+        }
+      : {}),
   });
   const slotResult =
     params.enable === false

@@ -399,3 +399,28 @@ describe("installPluginFromPath", () => {
     expect(nodeModulesExists).toBe(false);
   });
 });
+
+// Track A — guards that the install funnel actually invokes the approval gate
+// when the rollout flag is on (beforeEach already unstubs env between cases).
+describe("installPluginFromPath approval gate (OPENCLAW_REQUIRE_PLUGIN_APPROVAL)", () => {
+  it("fails closed with approval_required when enabled and no approval is given", async () => {
+    vi.stubEnv("OPENCLAW_REQUIRE_PLUGIN_APPROVAL", "1");
+    const { pluginDir, extensionsDir } = setupNativePluginInstallFixture();
+    const result = await installPluginFromPath({ path: pluginDir, extensionsDir });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe("plugin.install.approval_required");
+    }
+  });
+
+  it("installs when enabled and assumeApproved is set", async () => {
+    vi.stubEnv("OPENCLAW_REQUIRE_PLUGIN_APPROVAL", "1");
+    const { pluginDir, extensionsDir } = setupNativePluginInstallFixture();
+    const result = await installPluginFromPath({
+      path: pluginDir,
+      extensionsDir,
+      assumeApproved: true,
+    });
+    expect(result.ok).toBe(true);
+  });
+});

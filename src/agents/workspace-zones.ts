@@ -18,10 +18,17 @@ export type WorkspaceZoneOptions = {
   untrustedRoots?: readonly string[];
   env?: NodeJS.ProcessEnv;
   homedir?: () => string;
+  /**
+   * Whether the filesystem is case-insensitive. Defaults to true on darwin/win32
+   * (APFS/HFS+/NTFS), where a case-variant path resolves to the same file and
+   * would otherwise dodge the untrusted-zone check. Injectable for tests.
+   */
+  caseInsensitive?: boolean;
 };
 
 type ResolvedZoneConfig = {
   untrustedRoots: readonly string[];
+  caseInsensitive: boolean;
 };
 
 /**
@@ -41,7 +48,7 @@ export function classifyZone(absPath: string, options: WorkspaceZoneOptions = {}
   const config = resolveZoneConfig(options);
   const normalized = path.resolve(absPath);
   for (const root of config.untrustedRoots) {
-    if (isPathInsideOrEqualTo(normalized, root)) {
+    if (isPathInsideOrEqualTo(normalized, root, config.caseInsensitive)) {
       return "untrusted";
     }
   }
@@ -64,7 +71,7 @@ export function classifyZoneWithResolvedConfig(
   }
   const normalized = path.resolve(absPath);
   for (const root of config.untrustedRoots) {
-    if (isPathInsideOrEqualTo(normalized, root)) {
+    if (isPathInsideOrEqualTo(normalized, root, config.caseInsensitive)) {
       return "untrusted";
     }
   }
@@ -82,20 +89,31 @@ export function resolveWorkspaceZoneConfig(options: WorkspaceZoneOptions = {}): 
 }
 
 function resolveZoneConfig(options: WorkspaceZoneOptions): ResolvedZoneConfig {
+  const caseInsensitive =
+    options.caseInsensitive ?? (process.platform === "darwin" || process.platform === "win32");
   if (options.untrustedRoots && options.untrustedRoots.length > 0) {
-    return { untrustedRoots: options.untrustedRoots.map((root) => path.resolve(root)) };
+    return {
+      untrustedRoots: options.untrustedRoots.map((root) => path.resolve(root)),
+      caseInsensitive,
+    };
   }
   const env = options.env ?? process.env;
   const homedir = options.homedir ?? os.homedir;
   const defaultRoot = resolveUserPath(DEFAULT_UNTRUSTED_ROOT, env, homedir);
-  return { untrustedRoots: [path.resolve(defaultRoot)] };
+  return { untrustedRoots: [path.resolve(defaultRoot)], caseInsensitive };
 }
 
-function isPathInsideOrEqualTo(child: string, parent: string): boolean {
-  if (child === parent) {
+function isPathInsideOrEqualTo(child: string, parent: string, caseInsensitive: boolean): boolean {
+  // On case-insensitive filesystems a case-variant path (`.../UNTRUSTED/x`)
+  // resolves to the same file as `.../untrusted/x`, so fold case before the
+  // containment test; otherwise it would classify as trusted and be delivered
+  // unwrapped. Linux is case-sensitive — leave paths untouched there.
+  const foldedChild = caseInsensitive ? child.toLowerCase() : child;
+  const foldedParent = caseInsensitive ? parent.toLowerCase() : parent;
+  if (foldedChild === foldedParent) {
     return true;
   }
-  const relative = path.relative(parent, child);
+  const relative = path.relative(foldedParent, foldedChild);
   if (!relative || relative.startsWith("..")) {
     return false;
   }

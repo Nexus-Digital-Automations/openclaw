@@ -70,6 +70,30 @@ describe("createOpenClawReadTool untrusted-zone wrap", () => {
     expect(textBlock?.text).not.toContain("OpenClaw:ExternalContent:start");
   });
 
+  // L3: a symlink in a trusted zone whose realpath resolves into the untrusted
+  // root must be wrapped — the classifier checks the resolved target, not just
+  // the lexical path.
+  it("wraps when a trusted-zone path symlinks into the untrusted root", async () => {
+    const untrustedTarget = path.join(tmpHome, ".openclaw", "untrusted", "evil.md");
+    await fs.mkdir(path.dirname(untrustedTarget), { recursive: true });
+    await fs.writeFile(untrustedTarget, "laundered body", "utf8");
+    const trustedLink = path.join(tmpHome, "workspace", "note.md");
+    await fs.mkdir(path.dirname(trustedLink), { recursive: true });
+    await fs.symlink(untrustedTarget, trustedLink);
+    const { base } = makeStubBase({
+      content: [{ type: "text", text: "laundered body" }],
+      details: undefined,
+    });
+    const tool = createOpenClawReadTool(base);
+    const result = await tool.execute(
+      "tc-sym",
+      { path: trustedLink },
+      new AbortController().signal,
+    );
+    const textBlock = result.content.find((b) => b.type === "text");
+    expect(textBlock?.text).toContain("EXTERNAL_UNTRUSTED_CONTENT");
+  });
+
   it("does not wrap when the path parameter is missing or relative", async () => {
     const { base } = makeStubBase({
       content: [{ type: "text", text: "relative body" }],

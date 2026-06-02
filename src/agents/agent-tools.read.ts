@@ -875,7 +875,7 @@ export function createOpenClawReadTool(
         typeof normalizedRecord?.path === "string" ? normalizedRecord.path : "<unknown>";
       const strippedDetailsResult = stripReadTruncationContentDetails(result);
       const normalizedResult = await normalizeReadImageResult(strippedDetailsResult, filePath);
-      const zoneWrapped = wrapResultIfFromUntrustedZone(normalizedResult, filePath);
+      const zoneWrapped = await wrapResultIfFromUntrustedZone(normalizedResult, filePath);
       const skillStripped = stripSkillMarkdownInjectionTokens(zoneWrapped, filePath);
       return sanitizeToolResultImages(
         skillStripped,
@@ -919,14 +919,26 @@ function stripSkillMarkdownInjectionTokens(
 // Untrusted-zone reads represent model-generated or externally-fetched
 // content masquerading as a workspace file — wrap so downstream context never
 // treats it as trusted instruction source.
-function wrapResultIfFromUntrustedZone(
+async function wrapResultIfFromUntrustedZone(
   result: AgentToolResult<unknown>,
   filePath: string,
-): AgentToolResult<unknown> {
+): Promise<AgentToolResult<unknown>> {
   if (!filePath || !path.isAbsolute(filePath)) {
     return result;
   }
-  if (classifyZone(filePath) !== "untrusted") {
+  // Classify the realpath as well as the lexical path: a symlink that lives in a
+  // trusted zone but resolves into the untrusted root must still be wrapped. The
+  // laundering attack requires the symlink to resolve, so on realpath failure we
+  // fall back to the lexical classification rather than over-wrapping every read.
+  let resolvedPath: string;
+  try {
+    resolvedPath = await fs.realpath(filePath);
+  } catch {
+    resolvedPath = filePath;
+  }
+  const isUntrusted =
+    classifyZone(filePath) === "untrusted" || classifyZone(resolvedPath) === "untrusted";
+  if (!isUntrusted) {
     return result;
   }
   const content = Array.isArray(result.content) ? result.content : [];

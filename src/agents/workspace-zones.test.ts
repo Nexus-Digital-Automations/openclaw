@@ -32,6 +32,19 @@ describe("classifyZone (default untrusted root)", () => {
   it("classifies an unrelated absolute path as trusted", () => {
     expect(classifyZone(path.resolve(os.tmpdir(), "anywhere.txt"), withFakeHome())).toBe("trusted");
   });
+
+  // M4: on a case-insensitive filesystem a case-variant path resolves to the
+  // same file, so it must still classify as untrusted (injected, so the test is
+  // deterministic on case-sensitive Linux CI).
+  it("classifies a case-variant untrusted path as untrusted when case-insensitive", () => {
+    const target = path.join(FAKE_HOME, ".openclaw", "UNTRUSTED", "model-output.md");
+    expect(classifyZone(target, { ...withFakeHome(), caseInsensitive: true })).toBe("untrusted");
+  });
+
+  it("keeps case-variant paths distinct on a case-sensitive filesystem", () => {
+    const target = path.join(FAKE_HOME, ".openclaw", "UNTRUSTED", "model-output.md");
+    expect(classifyZone(target, { ...withFakeHome(), caseInsensitive: false })).toBe("trusted");
+  });
 });
 
 describe("classifyZone fail-safe behavior", () => {

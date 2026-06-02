@@ -103,6 +103,19 @@ export class SkillsLockUnexpectedFileError extends SkillsLockVerificationError {
   }
 }
 
+export class SkillsLockUnsafePathError extends SkillsLockVerificationError {
+  readonly pluginId: string;
+  readonly relativePath: string;
+  constructor(pluginId: string, relativePath: string) {
+    super(
+      `skills.lock entry "${relativePath}" for plugin "${pluginId}" is not a contained relative path; the lockfile may be corrupt or tampered`,
+    );
+    this.name = "SkillsLockUnsafePathError";
+    this.pluginId = pluginId;
+    this.relativePath = relativePath;
+  }
+}
+
 export class SkillsLockHashMismatchError extends SkillsLockVerificationError {
   readonly pluginId: string;
   readonly relativePath: string;

@@ -11,6 +11,7 @@ import {
   SkillsLockMissingFileError,
   SkillsLockUnexpectedFileError,
   SkillsLockUnknownPluginError,
+  SkillsLockUnsafePathError,
   SkillsLockVerificationError,
   verifyPluginAgainstLock,
   writeSkillsLock,
@@ -92,6 +93,43 @@ describe("writeSkillsLock / readSkillsLock round-trip", () => {
   it("returns undefined when the lockfile is absent", async () => {
     const result = await readSkillsLock(path.join(workspaceDir, "skills.lock"));
     expect(result).toBeUndefined();
+  });
+});
+
+describe("readSkillsLock path safety", () => {
+  async function writeRawLock(fileKey: string): Promise<string> {
+    const lockPath = path.join(workspaceDir, "skills.lock");
+    const raw = {
+      version: 1,
+      generatedAtMs: 1_700_000_000_000,
+      plugins: [
+        {
+          pluginId: "p1",
+          version: "1.0.0",
+          files: { [fileKey]: { sha256: "0".repeat(64), size: 1 } },
+        },
+      ],
+    };
+    await writeFile(lockPath, JSON.stringify(raw), "utf8");
+    return lockPath;
+  }
+
+  // A tampered lock key is the only attacker-influenced value that reaches
+  // path.join + stat/hash, so traversal must be refused at parse time.
+  it.each([
+    ["../../../../etc/passwd", "parent traversal"],
+    ["/etc/passwd", "absolute path"],
+    ["nested/../../escape.md", "normalized traversal"],
+    ["..\\..\\windows", "backslash separator"],
+  ])("rejects %s (%s) with SkillsLockUnsafePathError", async (fileKey) => {
+    const lockPath = await writeRawLock(fileKey);
+    await expect(readSkillsLock(lockPath)).rejects.toBeInstanceOf(SkillsLockUnsafePathError);
+  });
+
+  it("accepts a contained nested relative key", async () => {
+    const lockPath = await writeRawLock("docs/nested/skill.md");
+    const lock = await readSkillsLock(lockPath);
+    expect(lock?.plugins[0]?.files).toHaveProperty(["docs/nested/skill.md"]);
   });
 });
 

@@ -8,6 +8,7 @@ import {
   SkillsLockMissingFileError,
   SkillsLockUnexpectedFileError,
   SkillsLockUnknownPluginError,
+  SkillsLockUnsafePathError,
   type SkillsLock,
   type SkillsLockEntry,
   type SkillsLockPlugin,
@@ -151,7 +152,39 @@ function assertSkillsLockShape(value: unknown, lockPath: string): SkillsLock {
   if (!Array.isArray(candidate.plugins)) {
     throw new SkillsLockMissingError(lockPath);
   }
+  // The lockfile is untrusted on read (an author or attacker can edit it). Its
+  // file keys are later path.join'd against the install root and stat/hashed, so
+  // an escaping key (`../../etc/passwd`, an absolute path, or a `\` separator)
+  // would turn verification into an arbitrary out-of-tree read. Reject the whole
+  // lock here, at the single parse boundary, so every downstream consumer can
+  // trust the keys without re-checking.
+  for (const plugin of candidate.plugins) {
+    const files = (plugin as Partial<SkillsLockPlugin>).files;
+    if (!files || typeof files !== "object") {
+      continue;
+    }
+    for (const key of Object.keys(files)) {
+      if (!isContainedRelativePath(key)) {
+        throw new SkillsLockUnsafePathError(
+          (plugin as Partial<SkillsLockPlugin>).pluginId ?? "(unknown)",
+          key,
+        );
+      }
+    }
+  }
   return candidate as SkillsLock;
+}
+
+// A lock key is safe only if it stays inside the plugin root: not absolute, no
+// `\` (a path separator on Windows that could escape), no NUL, and its POSIX
+// normalization neither is nor begins with `..`. Keys are written POSIX-style by
+// writeSkillsLock, so a normalized form starting with `../` means traversal.
+function isContainedRelativePath(key: string): boolean {
+  if (!key || key.includes("\0") || key.includes("\\") || path.posix.isAbsolute(key)) {
+    return false;
+  }
+  const normalized = path.posix.normalize(key);
+  return normalized !== "." && normalized !== ".." && !normalized.startsWith("../");
 }
 
 class SkillsLockVersionError extends Error {
@@ -214,7 +247,7 @@ function assertNoUnexpectedFiles(
   locked: Readonly<Record<string, SkillsLockEntry>>,
 ): void {
   for (const relativePath of onDisk) {
-    if (!Object.prototype.hasOwnProperty.call(locked, relativePath)) {
+    if (!Object.hasOwn(locked, relativePath)) {
       throw new SkillsLockUnexpectedFileError(pluginId, relativePath);
     }
   }

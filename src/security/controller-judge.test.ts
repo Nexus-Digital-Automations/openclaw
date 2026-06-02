@@ -87,7 +87,9 @@ describe("controller-judge — judge approves / rejects", () => {
     expect(callArg.role).toBe("tool-call-controller");
     expect(callArg.modelHint).toBe("fast");
     expect(callArg.userPayload).toEqual({ toolName: "fs_read", argv: { path: "/x" } });
-    expect(callArg.untrustedFields).toEqual(["argv"]);
+    // I2: toolName is model-proposed and must also be marked untrusted so it
+    // never reaches the judge's trusted section unsanitized.
+    expect(callArg.untrustedFields).toEqual(["argv", "toolName"]);
   });
 
   it("returns approved=false with the judge's reason on negative verdict", async () => {
@@ -105,6 +107,17 @@ describe("controller-judge — judge approves / rejects", () => {
     if (!verdict.approved) {
       expect(verdict.judgeModel).toBe("claude-haiku-4-5");
     }
+  });
+});
+
+describe("controller-judge — judge throws", () => {
+  // I1: a synchronous throw from the judge must become a fail-closed verdict,
+  // self-enforcing the documented "never throws" contract.
+  it("fails CLOSED when the judge invocation throws", async () => {
+    judgeMock.mockRejectedValueOnce(new Error("provider init failed"));
+    const verdict = await evaluateToolCall({ toolName: "exec", argv: { cmd: "x" } });
+    expect(verdict.approved).toBe(false);
+    expect(verdict.reason).toBe("judge_unavailable:exception");
   });
 });
 

@@ -93,22 +93,39 @@ export async function evaluateToolCall(input: {
   if (!isControllerEnabled()) {
     return { approved: true, reason: "controller_disabled" };
   }
-  const judgeResponse = await invokeInternalJudge<
-    { toolName: string; argv: unknown },
-    ControllerVerdictOutput
-  >({
-    role: "tool-call-controller",
-    systemPrompt: CONTROLLER_SYSTEM_PROMPT,
-    userPayload: {
-      toolName: input.toolName,
-      argv: input.argv,
-    },
-    // The argv comes from the model and can carry external-content taint, so
-    // treat it as untrusted for the judge prompt's purposes.
-    untrustedFields: ["argv"],
-    responseSchema: CONTROLLER_RESPONSE_SCHEMA,
-    modelHint: "fast",
-  });
+  let judgeResponse: JudgeResponse<ControllerVerdictOutput>;
+  try {
+    judgeResponse = await invokeInternalJudge<
+      { toolName: string; argv: unknown },
+      ControllerVerdictOutput
+    >({
+      role: "tool-call-controller",
+      systemPrompt: CONTROLLER_SYSTEM_PROMPT,
+      userPayload: {
+        toolName: input.toolName,
+        argv: input.argv,
+      },
+      // Both fields are model-proposed and can carry external-content taint, so
+      // treat them as untrusted for the judge prompt's purposes — toolName must
+      // not reach the judge's trusted section unsanitized.
+      untrustedFields: ["argv", "toolName"],
+      responseSchema: CONTROLLER_RESPONSE_SCHEMA,
+      modelHint: "fast",
+    });
+  } catch (err) {
+    // Self-enforce the documented "never throws" contract: a synchronous throw
+    // (misconfig, provider init) must become a fail-closed verdict rather than
+    // propagate and depend on each caller's catch semantics.
+    log.warn("[controller-judge] judge invocation threw, failing closed", {
+      event: "controller_judge.exception",
+      tool_name: input.toolName,
+      sub_reason: String(err),
+      correlation_id: input.correlationId,
+    });
+    return isFailClosed()
+      ? { approved: false, reason: "judge_unavailable:exception" }
+      : { approved: true, reason: "judge_unavailable:exception" };
+  }
   return interpretJudgeResponse(judgeResponse, input);
 }
 

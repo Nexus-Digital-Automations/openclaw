@@ -4,6 +4,7 @@ import {
   didCorrelationTouchExternalContent,
   findArgvExternalContentTaint,
   recordExternalContentBody,
+  scanArgvForExternalContent,
   setExternalContentTouchScope,
 } from "./process-external-content-bodies.js";
 
@@ -32,6 +33,32 @@ describe("process-external-content-bodies registry", () => {
   it("returns undefined when the argv element itself is shorter than the floor", () => {
     recordExternalContentBody("a body long enough to be tainted");
     expect(findArgvExternalContentTaint(["t", "x"])).toBeUndefined();
+  });
+});
+
+describe("scanArgvForExternalContent (structured params)", () => {
+  // Regression: JSON.stringify escaped newlines/quotes/backslashes, so a tainted
+  // body containing them would not substring-match and silently bypass the gate.
+  it("detects a tainted body with newlines/quotes/backslashes in an object field", () => {
+    const body = 'EXTERNAL\nblock "with" quotes and a \\ backslash — long enough to taint';
+    recordExternalContentBody(body);
+    const hits = scanArgvForExternalContent({
+      file_path: "/tmp/out.txt",
+      content: `prefix ${body} suffix`,
+    });
+    expect(hits).toContain(body);
+  });
+
+  it("walks nested object/array structures to leaf strings", () => {
+    const body = "nested webhook body that is long enough to taint";
+    recordExternalContentBody(body);
+    const hits = scanArgvForExternalContent({ patch: { files: [{ add: body }] } });
+    expect(hits).toContain(body);
+  });
+
+  it("returns no match for benign structured params", () => {
+    recordExternalContentBody("a hostile external body long enough to taint");
+    expect(scanArgvForExternalContent({ file_path: "/tmp/notes.md", content: "ok" })).toEqual([]);
   });
 });
 

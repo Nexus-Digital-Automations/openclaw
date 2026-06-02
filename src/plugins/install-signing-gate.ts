@@ -21,7 +21,7 @@ import {
   parsePluginSignatureSidecar,
   verifyPluginSignature,
 } from "../security/plugin-signing.js";
-import { type PluginCapabilities } from "./capabilities.js";
+import type { PluginCapabilities } from "./capabilities.js";
 import { loadPluginCapabilitiesFromDir } from "./plugin-capabilities-manifest.js";
 
 export const PLUGIN_INSTALL_SIGNING_ERROR_CODE = {

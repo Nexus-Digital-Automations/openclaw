@@ -31,7 +31,7 @@ import { resolveRequiredHomeDir } from "../infra/home-dir.js";
 //   3. all-zeros placeholder — source / dev / unconfigured builds. It matches no
 //      real Ed25519 fingerprint, so such builds trust only explicitly
 //      `plugins trust`-ed publishers, never an accidental key.
-// TODO: P3.3 sigstore transparency log supersedes this.
+// P3.3's sigstore transparency log will supersede this placeholder trust model.
 const FINGERPRINT_HEX_LENGTH = 32;
 /** All-zeros trust-root sentinel for unconfigured builds; matches no real key. @internal */
 export const FIRST_PARTY_FINGERPRINT_PLACEHOLDER = "0".repeat(FINGERPRINT_HEX_LENGTH);

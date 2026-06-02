@@ -102,7 +102,9 @@ async function main() {
   console.log(JSON.stringify(summary, null, 2));
 }
 
-main().catch((err) => {
+try {
+  await main();
+} catch (err) {
   console.error(String(err));
   process.exit(1);
-});
+}

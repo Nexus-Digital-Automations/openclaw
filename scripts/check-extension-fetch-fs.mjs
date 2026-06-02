@@ -135,16 +135,16 @@ function isFetchFalsePositive(line) {
 }
 
 async function main() {
-  const argv = process.argv.slice(2);
-  const strict = argv.includes("--strict");
-  const json = argv.includes("--json");
+  const argv = new Set(process.argv.slice(2));
+  const strict = argv.has("--strict");
+  const json = argv.has("--json");
   const files = await findExtensionSourceFiles();
   const allHits = [];
   for (const file of files) {
     allHits.push(...(await scanFile(file)));
   }
   const blockingHits = allHits.filter(
-    (hit) => !SUBPROCESS_DRIVER_FILES.some((path) => hit.relativePath.includes(path)),
+    (hit) => !SUBPROCESS_DRIVER_FILES.some((driverPath) => hit.relativePath.includes(driverPath)),
   );
   const fetchCount = blockingHits.filter((hit) => hit.match === "fetch").length;
   const fsCount = blockingHits.filter((hit) => hit.match === "node:fs").length;

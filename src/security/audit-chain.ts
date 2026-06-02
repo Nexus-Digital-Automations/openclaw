@@ -64,7 +64,7 @@ function canonicalize(value: unknown): string {
     return `[${value.map(canonicalize).join(",")}]`;
   }
   const record = value as Record<string, unknown>;
-  const keys = Object.keys(record).sort();
+  const keys = Object.keys(record).toSorted();
   const parts = keys.map((key) => `${JSON.stringify(key)}:${canonicalize(record[key])}`);
   return `{${parts.join(",")}}`;
 }
@@ -115,13 +115,19 @@ function parseLine(line: string): AuditChainEntry | null {
 async function readLastLine(filePath: string): Promise<string | null> {
   try {
     const content = await fs.readFile(filePath, "utf8");
-    if (content.length === 0) return null;
+    if (content.length === 0) {
+      return null;
+    }
     const trimmed = content.endsWith("\n") ? content.slice(0, -1) : content;
-    if (trimmed.length === 0) return null;
+    if (trimmed.length === 0) {
+      return null;
+    }
     const newlineIdx = trimmed.lastIndexOf("\n");
     return newlineIdx === -1 ? trimmed : trimmed.slice(newlineIdx + 1);
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      return null;
+    }
     throw err;
   }
 }
@@ -134,7 +140,9 @@ function enqueueAppend(filePath: string, work: () => Promise<void>): Promise<voi
   writeQueues.set(
     filePath,
     next.finally(() => {
-      if (writeQueues.get(filePath) === next) writeQueues.delete(filePath);
+      if (writeQueues.get(filePath) === next) {
+        writeQueues.delete(filePath);
+      }
     }),
   );
   return next;
@@ -142,7 +150,9 @@ function enqueueAppend(filePath: string, work: () => Promise<void>): Promise<voi
 
 async function resolvePrevHash(filePath: string): Promise<string> {
   const lastLine = await readLastLine(filePath);
-  if (!lastLine) return GENESIS_PREV_HASH;
+  if (!lastLine) {
+    return GENESIS_PREV_HASH;
+  }
   return sha256Hex(lastLine);
 }
 
@@ -168,12 +178,14 @@ export async function appendAuditEntry(input: AuditChainEntryInput): Promise<Aud
     await fs.appendFile(filePath, `${serialized}\n`, "utf8");
     result = entry;
   });
-  if (!result) throw new Error("audit-chain: append produced no entry");
+  if (!result) {
+    throw new Error("audit-chain: append produced no entry");
+  }
   return result;
 }
 
 export function tryAppendAuditEntry(input: AuditChainEntryInput): void {
-  void appendAuditEntry(input).catch((err) => {
+  void appendAuditEntry(input).catch((err: unknown) => {
     logWarn(`audit-chain: append failed: ${String(err)}`);
   });
 }
@@ -183,17 +195,23 @@ export async function verifyAuditChain(filePath: string): Promise<AuditChainVeri
   try {
     content = await fs.readFile(path.resolve(filePath), "utf8");
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return { ok: true };
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      return { ok: true };
+    }
     return { ok: false, brokenAt: 0, reason: `read failed: ${String(err)}` };
   }
   const trimmed = content.endsWith("\n") ? content.slice(0, -1) : content;
-  if (trimmed.length === 0) return { ok: true };
+  if (trimmed.length === 0) {
+    return { ok: true };
+  }
   const lines = trimmed.split("\n");
   let expectedPrev = GENESIS_PREV_HASH;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i] ?? "";
     const entry = parseLine(line);
-    if (!entry) return { ok: false, brokenAt: i, reason: "malformed entry" };
+    if (!entry) {
+      return { ok: false, brokenAt: i, reason: "malformed entry" };
+    }
     if (entry.prevLogHash !== expectedPrev) {
       return { ok: false, brokenAt: i, reason: "prevLogHash mismatch" };
     }
@@ -204,8 +222,3 @@ export async function verifyAuditChain(filePath: string): Promise<AuditChainVeri
   }
   return { ok: true };
 }
-
-export const __AUDIT_CHAIN_INTERNALS = {
-  GENESIS_PREV_HASH,
-  DEFAULT_LOG_PATH,
-};

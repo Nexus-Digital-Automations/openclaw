@@ -59,7 +59,9 @@ describe("compileAc + stepAc — multi-family", () => {
       for (let i = 0; i < text.length; i++) {
         const stepped = stepAc(ac, node, text.charCodeAt(i));
         node = stepped.node;
-        if (stepped.matches.length > 0) return stepped.matches[0].family;
+        if (stepped.matches.length > 0) {
+          return stepped.matches[0].family;
+        }
       }
       return null;
     };
@@ -132,7 +134,9 @@ describe("compileAc + stepAc — minPatternLength", () => {
       for (let i = 0; i < text.length; i++) {
         const stepped = stepAc(ac, node, text.charCodeAt(i));
         node = stepped.node;
-        if (stepped.matches.length > 0) return stepped.matches[0].family;
+        if (stepped.matches.length > 0) {
+          return stepped.matches[0].family;
+        }
       }
       return null;
     };
@@ -155,7 +159,9 @@ describe("stepAc — streaming frontier preservation", () => {
     for (let i = 0; i < chunk1.length; i++) {
       const stepped = stepAc(ac, node, chunk1.charCodeAt(i));
       node = stepped.node;
-      if (stepped.matches.length > 0) foundInChunk1 = true;
+      if (stepped.matches.length > 0) {
+        foundInChunk1 = true;
+      }
     }
     expect(foundInChunk1).toBe(false);
 

@@ -266,7 +266,7 @@ function assertNoUnexpectedFiles(
   locked: Readonly<Record<string, PluginsLockEntry>>,
 ): void {
   for (const relativePath of onDisk) {
-    if (!Object.prototype.hasOwnProperty.call(locked, relativePath)) {
+    if (!Object.hasOwn(locked, relativePath)) {
       throw new PluginsLockUnexpectedFileError(pluginId, relativePath);
     }
   }

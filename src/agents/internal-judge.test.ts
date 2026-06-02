@@ -54,7 +54,9 @@ describe("invokeInternalJudge", () => {
       { provider, now: fixedClock([1000, 1250]) },
     );
     expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    if (!result.ok) {
+      return;
+    }
     expect(result.output).toEqual({ verdict: "allow", reason: "looks safe" });
     expect(result.modelId).toBe("claude-haiku-4-5");
     expect(result.inputTokens).toBe(42);
@@ -81,7 +83,9 @@ describe("invokeInternalJudge", () => {
       { provider },
     );
     expect(result.ok).toBe(false);
-    if (result.ok) return;
+    if (result.ok) {
+      return;
+    }
     expect(result.reason).toBe("schema_violation");
     expect(result.detail).toContain("reason");
   });
@@ -100,7 +104,9 @@ describe("invokeInternalJudge", () => {
       { provider },
     );
     expect(result.ok).toBe(false);
-    if (result.ok) return;
+    if (result.ok) {
+      return;
+    }
     expect(result.reason).toBe("timeout");
     expect(result.detail).toContain("50ms");
   });
@@ -121,7 +127,9 @@ describe("invokeInternalJudge", () => {
       { provider },
     );
     expect(result.ok).toBe(false);
-    if (result.ok) return;
+    if (result.ok) {
+      return;
+    }
     expect(result.reason).toBe("model_error");
     expect(result.detail).toContain("HTTP 500");
   });
@@ -145,7 +153,9 @@ describe("invokeInternalJudge", () => {
       { provider },
     );
     expect(result.ok).toBe(false);
-    if (result.ok) return;
+    if (result.ok) {
+      return;
+    }
     expect(result.reason).toBe("refused");
     expect(result.detail).toContain("cannot help");
   });
@@ -201,7 +211,9 @@ describe("invokeInternalJudge", () => {
       { provider },
     );
     expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    if (!result.ok) {
+      return;
+    }
     expect(result.output.verdict).toBe("block");
   });
 });

@@ -625,8 +625,8 @@ describe("anthropic transport stream", () => {
       }
     }
     expect(calls).toHaveLength(2);
-    const firstEnv = requireRecord(calls[0]!.verifiedCmd, "first verifiedCmd");
-    const secondEnv = requireRecord(calls[1]!.verifiedCmd, "second verifiedCmd");
+    const firstEnv = requireRecord(calls[0].verifiedCmd, "first verifiedCmd");
+    const secondEnv = requireRecord(calls[1].verifiedCmd, "second verifiedCmd");
     expect(firstEnv.prevHash).toBe(GENESIS_PREV_HASH);
     expect(firstEnv.provenance).toBe("model");
     expect(firstEnv.nonce).toHaveLength(64);

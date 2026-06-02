@@ -168,7 +168,7 @@ function redactString(text: string, compiled: CompiledAC<RedactorFamily>): strin
 function chooseNonOverlappingMatches(matches: readonly AcMatch[]): readonly AcMatch[] {
   // Earliest-start wins; on tie, prefer the longest literal so a containing
   // pattern is masked over a contained one.
-  const sorted = [...matches].sort((a, b) => {
+  const sorted = [...matches].toSorted((a, b) => {
     if (a.start !== b.start) {
       return a.start - b.start;
     }

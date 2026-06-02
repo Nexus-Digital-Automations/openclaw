@@ -91,7 +91,7 @@ function redactSecretLiterals(text: string): RedactionPass {
   const matched: string[] = [];
   // Longest-first so a long secret that contains a shorter literal is masked
   // intact rather than getting partially-replaced and leaving fragments.
-  const ordered = [...candidates].sort((left, right) => right.length - left.length);
+  const ordered = [...candidates].toSorted((left, right) => right.length - left.length);
   for (const literal of ordered) {
     if (literal.length < 4) {
       continue;

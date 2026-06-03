@@ -85,7 +85,7 @@ describe("resolveGatewayScopedTools", () => {
   });
 
   it("lists canonical core tool ids in the deny set, not phantom fs_* names", () => {
-    const deny = new Set(DEFAULT_GATEWAY_HTTP_TOOL_DENY);
+    const deny = new Set<string>(DEFAULT_GATEWAY_HTTP_TOOL_DENY);
     for (const id of ["write", "edit", "apply_patch", "exec", "process"]) {
       expect(deny.has(id), `${id} must be in the gateway HTTP deny list`).toBe(true);
     }

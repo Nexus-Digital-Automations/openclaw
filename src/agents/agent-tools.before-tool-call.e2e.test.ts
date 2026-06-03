@@ -36,6 +36,12 @@ vi.mock("../plugins/hook-runner-global.js", async () => {
 vi.mock("./tools/gateway.js", () => ({
   callGatewayTool: vi.fn(),
 }));
+// The controller judge (B.1) is default-on and fails closed without a judge LLM,
+// vetoing every call before the loop-detection / hook-veto paths under test run.
+// This suite isolates those layers, so neutralize the orthogonal judge.
+vi.mock("../security/controller-judge.js", () => ({
+  evaluateToolCall: vi.fn(async () => ({ approved: true, reason: "test" })),
+}));
 
 const mockGetGlobalHookRunner = vi.mocked(getGlobalHookRunner);
 

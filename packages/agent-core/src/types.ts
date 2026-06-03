@@ -34,6 +34,27 @@ export type StreamFn = LlmStreamFn;
 export type ToolExecutionMode = "sequential" | "parallel";
 
 /**
+ * Security capability a tool exercises, consumed by the external-content taint
+ * gate. Defined here (not in the wire `Tool` shape) so runtime and wire types
+ * agree while the dangerous-capability set and name map stay host-side in
+ * `src/agents/tools/tool-capabilities.ts`.
+ *
+ * `unknown` is the fail-closed sentinel for a tool that declares nothing and
+ * has no static mapping (e.g. an undeclared plugin tool): it is treated as
+ * dangerous across every string parameter.
+ */
+export type ToolCapability =
+  | "exec"
+  | "write"
+  | "edit"
+  | "egress"
+  | "message-send"
+  | "control-plane"
+  | "delayed-exec"
+  | "read-local"
+  | "unknown";
+
+/**
  * Controls how many queued user messages are injected when the agent loop reaches a queue drain point.
  *
  * - "all": drain and inject every queued message at that point.
@@ -459,6 +480,13 @@ export interface AgentTool<
    * If omitted, the default execution mode applies.
    */
   executionMode?: ToolExecutionMode;
+  /**
+   * Security capabilities this tool exercises, used by the external-content
+   * taint gate to decide whether tainted argv must force operator approval.
+   * When omitted, the host resolves capabilities from a static name map and
+   * falls back to `["unknown"]` (fail-closed) for undeclared tools.
+   */
+  capabilities?: readonly ToolCapability[];
 }
 
 /** Context snapshot passed into the low-level agent loop. */

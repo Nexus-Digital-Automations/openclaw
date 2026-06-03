@@ -5,6 +5,7 @@ import {
   findArgvExternalContentTaint,
   recordExternalContentBody,
   scanArgvForExternalContent,
+  scanArgvForExternalContentByParam,
   setExternalContentTouchScope,
 } from "./process-external-content-bodies.js";
 
@@ -59,6 +60,40 @@ describe("scanArgvForExternalContent (structured params)", () => {
   it("returns no match for benign structured params", () => {
     recordExternalContentBody("a hostile external body long enough to taint");
     expect(scanArgvForExternalContent({ file_path: "/tmp/notes.md", content: "ok" })).toEqual([]);
+  });
+});
+
+describe("scanArgvForExternalContentByParam (param attribution)", () => {
+  it("reports the leaf key for a tainted top-level field", () => {
+    const body = "untrusted url fragment that is long enough to taint";
+    recordExternalContentBody(body);
+    const hits = scanArgvForExternalContentByParam({ url: `https://x/?d=${body}`, mode: "GET" });
+    expect(hits).toEqual([{ paramPath: "url", matchedBody: body }]);
+  });
+
+  it("reports the leaf key (text) for a tainted nested array element", () => {
+    const body = "nested webhook body that is long enough to taint";
+    recordExternalContentBody(body);
+    const hits = scanArgvForExternalContentByParam({ blocks: [{ text: `pre ${body}` }] });
+    expect(hits).toEqual([{ paramPath: "blocks.0.text", matchedBody: body }]);
+  });
+
+  it("attributes the same body landing in two params to both leaves", () => {
+    const body = "a hostile external body long enough to taint twice";
+    recordExternalContentBody(body);
+    const hits = scanArgvForExternalContentByParam({ url: body, note: body });
+    expect(hits).toHaveLength(2);
+    expect(hits.map((hit) => hit.paramPath).toSorted()).toEqual(["note", "url"]);
+  });
+
+  it("honors the 16-char floor so short benign leaves never match", () => {
+    recordExternalContentBody("short");
+    expect(scanArgvForExternalContentByParam({ url: "short text" })).toEqual([]);
+  });
+
+  it("returns no hits for benign structured params", () => {
+    recordExternalContentBody("a hostile external body long enough to taint");
+    expect(scanArgvForExternalContentByParam({ path: "/tmp/notes.md", content: "ok" })).toEqual([]);
   });
 });
 

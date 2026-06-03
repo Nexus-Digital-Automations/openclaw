@@ -42,7 +42,7 @@ import {
 import { tryAppendAuditEntry } from "../security/audit-chain.js";
 import { evaluateToolCall } from "../security/controller-judge.js";
 import { createLazyRuntimeSurface } from "../shared/lazy-runtime.js";
-import { scanArgvForExternalContent } from "../shared/process-external-content-bodies.js";
+import { scanArgvForExternalContentByParam } from "../shared/process-external-content-bodies.js";
 import {
   resolveSkillTelemetrySource,
   resolveSkillTelemetrySourceValue,
@@ -63,6 +63,12 @@ import type { SandboxFsBridge } from "./sandbox/fs-bridge.js";
 import { normalizeToolName } from "./tool-policy.js";
 import type { AnyAgentTool } from "./tools/common.js";
 import { callGatewayTool } from "./tools/gateway.js";
+import {
+  evaluateCapabilityTaintGate,
+  isDangerousCapability,
+  resolveToolCapabilities,
+  type ToolCapability,
+} from "./tools/tool-capabilities.js";
 
 export type ToolOutcomeObservation = {
   toolName: string;
@@ -241,28 +247,6 @@ function buildAdjustedParamsKey(params: { runId?: string; toolCallId: string }):
     return `${params.runId}:${params.toolCallId}`;
   }
   return params.toolCallId;
-}
-
-// Exec-shaped tool names that get the external-content canary gate. Narrower
-// than `isLikelyMutatingToolName` (which includes `message`, `gateway`, etc.):
-// we only force operator approval for tools where embedding model-pasted
-// external content in argv is the dangerous case — shell execs and fresh-content
-// file writers. `exec` mirrors `isExecToolName` in
-// pi-embedded-subscribe.handlers.tools.ts (the `bash` alias is folded into
-// `exec` by normalizeToolName before this gate runs); `write` and `apply_patch`
-// mirror the fresh-content half of FILE_MUTATING_TOOL_NAMES in tool-mutation.ts.
-// `apply_patch` carries attacker-controlled fresh bytes in its `*** Add File:` /
-// `+` body lines (see dangerous-tools.ts: "can rewrite arbitrary files"), so it
-// is the same threat class as `write`. We omit `edit` because that surface is
-// scoped to existing content rather than fresh attacker-controlled payload.
-const EXTERNAL_CONTENT_GATED_TOOL_NAMES: ReadonlySet<string> = new Set([
-  "exec",
-  "write",
-  "apply_patch",
-]);
-
-function isExternalContentGatedToolName(toolName: string): boolean {
-  return EXTERNAL_CONTENT_GATED_TOOL_NAMES.has(toolName);
 }
 
 function buildCanaryApprovalRequest(
@@ -829,6 +813,10 @@ export async function runBeforeToolCallHook(args: {
   ctx?: HookContext;
   signal?: AbortSignal;
   approvalMode?: "request" | "report" | "defer";
+  // Security capabilities of the tool, resolved at the wrap site where the tool
+  // object (and any explicit declaration) is in scope. Omitted by name-only
+  // dispatch paths, which fall back to static resolution below — fail-closed.
+  capabilities?: readonly ToolCapability[];
 }): Promise<HookOutcome> {
   const toolName = normalizeToolName(args.toolName || "tool");
   const params = args.params;
@@ -902,35 +890,42 @@ export async function runBeforeToolCallHook(args: {
     }
   }
 
-  // External-content canary gate: scan exec-/bash-/write-shaped tool argv for
-  // bodies the gateway flagged as untrusted (see
-  // src/security/external-content.ts → recordExternalContentBody).
-  // A match means the model is forwarding attacker-controlled content into a
-  // dangerous tool — force operator approval before dispatch.
-  if (isExternalContentGatedToolName(toolName)) {
-    const triggeredCanaries = scanArgvForExternalContent(params);
-    if (triggeredCanaries.length > 0) {
-      log.warn(
-        `external-content canary gate: tool=${toolName} matched=${triggeredCanaries.length} forcing operator approval`,
-      );
-      if (args.approvalMode === "report") {
-        return {
-          blocked: true,
-          kind: "failure",
-          deniedReason: "plugin-approval",
-          reason: "External-untrusted content detected in argv — operator approval required.",
-          params,
-        };
+  // External-content capability gate: when a tool exercises a dangerous
+  // capability (exec/write/edit/egress/message-send/control-plane/delayed-exec,
+  // or the fail-closed `unknown`) AND a body the gateway flagged as untrusted
+  // (src/security/external-content.ts → recordExternalContentBody) landed in one
+  // of that capability's dangerous parameters, the model is forwarding
+  // attacker-controlled content into a dangerous sink — force operator approval.
+  // Capabilities come from the wrap site when available; name-only dispatch
+  // paths fall back to static resolution (undeclared tools → `unknown`).
+  const capabilities = args.capabilities ?? resolveToolCapabilities({ name: toolName });
+  if (capabilities.some(isDangerousCapability)) {
+    const taintHits = scanArgvForExternalContentByParam(params);
+    if (taintHits.length > 0) {
+      const verdict = evaluateCapabilityTaintGate({ capabilities, hits: taintHits });
+      if (verdict.triggered) {
+        log.warn(
+          `external-content capability gate: tool=${toolName} capabilities=${verdict.triggeredCapabilities.join(",")} matched=${verdict.matchedBodies.length} forcing operator approval`,
+        );
+        if (args.approvalMode === "report") {
+          return {
+            blocked: true,
+            kind: "failure",
+            deniedReason: "plugin-approval",
+            reason: "External-untrusted content detected in argv — operator approval required.",
+            params,
+          };
+        }
+        return await requestPluginToolApproval({
+          approval: buildCanaryApprovalRequest(toolName, verdict.matchedBodies),
+          toolName,
+          toolCallId: args.toolCallId,
+          ctx: args.ctx,
+          signal: args.signal,
+          baseParams: params,
+          triggeredCanaries: verdict.matchedBodies,
+        });
       }
-      return await requestPluginToolApproval({
-        approval: buildCanaryApprovalRequest(toolName, triggeredCanaries),
-        toolName,
-        toolCallId: args.toolCallId,
-        ctx: args.ctx,
-        signal: args.signal,
-        baseParams: params,
-        triggeredCanaries,
-      });
     }
   }
 
@@ -1199,6 +1194,26 @@ export async function runBeforeToolCallHook(args: {
   }
 }
 
+// Dedupe the undeclared-capability nudge so we warn once per tool name, not on
+// every session's tool wrap. Process-local; restart re-warns, which is fine.
+const warnedUndeclaredCapabilityTools = new Set<string>();
+
+function warnOnceIfUndeclaredCapabilities(
+  toolName: string,
+  capabilities: readonly ToolCapability[],
+): void {
+  const isUndeclared = capabilities.length === 1 && capabilities[0] === "unknown";
+  if (!isUndeclared || warnedUndeclaredCapabilityTools.has(toolName)) {
+    return;
+  }
+  warnedUndeclaredCapabilityTools.add(toolName);
+  log.warn(
+    `tool '${toolName}' declares no security capabilities and is not statically mapped; ` +
+      `treating it as fail-closed 'unknown' (gates on any tainted argv). ` +
+      `Declare 'capabilities' on the tool to scope this.`,
+  );
+}
+
 export function wrapToolWithBeforeToolCallHook(
   tool: AnyAgentTool,
   ctx?: HookContext,
@@ -1210,6 +1225,11 @@ export function wrapToolWithBeforeToolCallHook(
   }
   const toolName = tool.name || "tool";
   const diagnosticIdentity = resolveToolDiagnosticIdentity(tool);
+  // Resolve once per wrap (not per call). An undeclared, unmapped tool resolves
+  // to the fail-closed `["unknown"]` sentinel — warn once so plugin authors learn
+  // their tool now gates on any tainted argv until it declares capabilities.
+  const toolCapabilities = resolveToolCapabilities(tool);
+  warnOnceIfUndeclaredCapabilities(toolName, toolCapabilities);
   const hookOptions: BeforeToolCallWrapperOptions = {
     ...(options.approvalMode ? { approvalMode: options.approvalMode } : {}),
     emitDiagnostics: options.emitDiagnostics !== false,
@@ -1227,6 +1247,7 @@ export function wrapToolWithBeforeToolCallHook(
         ctx,
         signal,
         approvalMode: hookOptions.approvalMode,
+        capabilities: toolCapabilities,
       });
       if (outcome.blocked) {
         if (outcome.kind !== "veto") {

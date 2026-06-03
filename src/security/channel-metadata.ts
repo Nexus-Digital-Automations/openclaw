@@ -1,4 +1,5 @@
 import { uniqueStrings } from "@openclaw/normalization-core/string-normalization";
+import { recordExternalContentBody } from "../shared/process-external-content-bodies.js";
 import { wrapExternalContent } from "./external-content.js";
 
 const DEFAULT_MAX_CHARS = 800;
@@ -43,4 +44,27 @@ export function buildUntrustedChannelMetadata(params: {
     source: "channel_metadata",
     includeWarning: false,
   });
+}
+
+/**
+ * Register an untrusted inbound channel message body in the external-content
+ * taint set so the capability gate catches it if the model later echoes it into
+ * an egress/exec/message parameter (the canonical exfil path). This does NOT
+ * alter the prompt the model sees — it only marks the body as tainted; the
+ * separate spotlighting/delimiting of the prompt is intentionally deferred.
+ *
+ * Only external human senders carry untrusted content: internal/system events
+ * (no sender) are skipped, and a command-authorized sender is a trusted operator
+ * whose content is not tainted. Everything else — unverified or unauthorized
+ * human senders — fails closed to tainted.
+ */
+export function recordUntrustedInboundBody(params: {
+  body: string | undefined;
+  senderId?: string;
+  commandAuthorized: boolean;
+}): void {
+  if (!params.body || !params.senderId || params.commandAuthorized) {
+    return;
+  }
+  recordExternalContentBody(params.body);
 }

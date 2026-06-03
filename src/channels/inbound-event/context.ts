@@ -13,6 +13,7 @@ import {
 } from "../../auto-reply/reply/inbound-text.js";
 import type { FinalizedMsgContext } from "../../auto-reply/templating.js";
 import type { ContextVisibilityMode } from "../../config/types.base.js";
+import { recordUntrustedInboundBody } from "../../security/channel-metadata.js";
 import { shouldIncludeSupplementalContext } from "../../security/context-visibility.js";
 import type {
   AccessFacts,
@@ -460,6 +461,10 @@ export function buildChannelInboundEventContext(
     Partial<ChannelInboundSupplementalResolutionOptions>,
 ): MaybePromise<BuiltChannelInboundEventContext> {
   const body = params.message.body ?? params.message.rawBody;
+  const commandAuthorized = resolveAccessFactsCommandAuthorized(params.access) === true;
+  // Taint untrusted third-party inbound bodies so the capability gate catches an
+  // egress/exec echo of them. Authorized operators and internal events are skipped.
+  recordUntrustedInboundBody({ body, senderId: params.sender.id, commandAuthorized });
   const commandTurn = resolveChannelCommandContext({
     command: params.command,
     commandTurn: params.commandTurn,
@@ -498,7 +503,7 @@ export function buildChannelInboundEventContext(
     Provider: params.provider ?? params.channel,
     Surface: params.surface ?? params.provider ?? params.channel,
     WasMentioned: params.access?.mentions?.wasMentioned,
-    CommandAuthorized: resolveAccessFactsCommandAuthorized(params.access) === true,
+    CommandAuthorized: commandAuthorized,
     CommandTurn: commandTurn,
     MessageThreadId: params.reply.messageThreadId ?? params.conversation.threadId,
     NativeChannelId: params.reply.nativeChannelId ?? params.conversation.nativeChannelId,

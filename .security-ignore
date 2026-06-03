@@ -72,8 +72,13 @@
 [tool:pattern-scanner] apps/macos/Sources/OpenClaw/CanvasWindowController.swift
 # weak-hash (MD5/SHA1): non-security content hashing — asset digests in the
 #   vendored diff-viewer bundles and a media chunk id in qqbot. Not used for auth.
+#   In the diffs-language-pack bundle the "md5"/"sha1" strings are syntax-
+#   highlighting grammar keyword/constant lists (a hash-algorithm keyword list,
+#   PHP CRYPT_* constants, SSH_HOST_PUBLIC_KEY_MD5, OSPF md5), not hashing calls.
 [tool:pattern-scanner] dist-runtime/extensions/diffs/assets/viewer-runtime.js
 [tool:pattern-scanner] extensions/diffs/assets/viewer-runtime.js
+[tool:pattern-scanner] dist-runtime/extensions/diffs-language-pack/assets/viewer-runtime.js
+[tool:pattern-scanner] extensions/diffs-language-pack/assets/viewer-runtime.js
 [tool:pattern-scanner] extensions/qqbot/src/engine/api/media-chunked.ts
 # path-traversal: operator-run local model-usage report script.
 [tool:pattern-scanner] skills/model-usage/scripts/model_usage.py

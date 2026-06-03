@@ -1209,4 +1209,11 @@ CREATE TABLE IF NOT EXISTS backup_runs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_backup_runs_created
-  ON backup_runs(created_at DESC, id);\n`;
+  ON backup_runs(created_at DESC, id);
+
+CREATE TABLE IF NOT EXISTS audit_chain_tips (
+  log_path TEXT NOT NULL PRIMARY KEY,
+  entry_count INTEGER NOT NULL,
+  last_line_hash TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);\n`;

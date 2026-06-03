@@ -80,6 +80,13 @@ export interface ApnsRegistrations {
   updated_at_ms: number;
 }
 
+export interface AuditChainTips {
+  entry_count: number;
+  last_line_hash: string;
+  log_path: string;
+  updated_at: number;
+}
+
 export interface AuthProfileState {
   state_json: string;
   store_key: string;
@@ -948,6 +955,7 @@ export interface DB {
   agent_model_catalogs: AgentModelCatalogs;
   android_notification_recent_packages: AndroidNotificationRecentPackages;
   apns_registrations: ApnsRegistrations;
+  audit_chain_tips: AuditChainTips;
   auth_profile_state: AuthProfileState;
   auth_profile_stores: AuthProfileStores;
   backup_runs: BackupRuns;

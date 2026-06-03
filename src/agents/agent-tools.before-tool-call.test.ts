@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetDiagnosticEventsForTest } from "../infra/diagnostic-events.js";
 import { resetDiagnosticSessionStateForTest } from "../logging/diagnostic-session-state.js";
 import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
+import { clearApprovedPlansForTests, setApprovedPlan } from "../security/plan-cfi/plan-store.js";
 import {
   clearExternalContentBodiesForTests,
   recordExternalContentBody,
@@ -70,6 +71,7 @@ describe("before_tool_call external-content canary gate", () => {
 
   afterEach(() => {
     clearExternalContentBodiesForTests();
+    clearApprovedPlansForTests();
     vi.clearAllMocks();
   });
 
@@ -246,6 +248,65 @@ describe("before_tool_call external-content canary gate", () => {
       capabilities: ["read-local"],
       approvalMode: "report",
       ctx: { agentId: "main", sessionKey: "main" },
+    });
+
+    expect(outcome.blocked).toBe(false);
+  });
+
+  // L3 control-flow integrity: once a run has an approved plan, a tool call that
+  // matches no approved step is an unsanctioned action and must be vetoed before
+  // dispatch (the controller-judge is mocked-approved, proving CFI runs first).
+  it("vetoes a tool call that matches no approved plan step", async () => {
+    setApprovedPlan({
+      planId: "p",
+      runId: "run-cfi",
+      steps: [
+        {
+          stepId: "s",
+          ordinal: 0,
+          toolName: "read",
+          capability: "read-local",
+          paramConstraints: [],
+          effectful: false,
+          status: "approved",
+        },
+      ],
+    });
+
+    const outcome = await runBeforeToolCallHook({
+      toolName: "exec",
+      params: { command: "rm -rf /" },
+      ctx: { agentId: "main", sessionKey: "main", runId: "run-cfi" },
+    });
+
+    expect(outcome.blocked).toBe(true);
+    if (outcome.blocked) {
+      expect(outcome.kind).toBe("veto");
+      expect(outcome.deniedReason).toBe("plan-cfi-rejection");
+    }
+  });
+
+  it("allows a tool call that matches an approved plan step", async () => {
+    setApprovedPlan({
+      planId: "p",
+      runId: "run-cfi-ok",
+      steps: [
+        {
+          stepId: "s",
+          ordinal: 0,
+          toolName: "read",
+          capability: "read-local",
+          paramConstraints: [],
+          effectful: false,
+          status: "approved",
+        },
+      ],
+    });
+
+    const outcome = await runBeforeToolCallHook({
+      toolName: "read",
+      params: { file_path: "/work/notes.md" },
+      ctx: { agentId: "main", sessionKey: "main", runId: "run-cfi-ok" },
     });
 
     expect(outcome.blocked).toBe(false);

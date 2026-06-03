@@ -41,6 +41,7 @@ import {
 } from "../plugins/types.js";
 import { tryAppendAuditEntry } from "../security/audit-chain.js";
 import { evaluateToolCall } from "../security/controller-judge.js";
+import { evaluateToolRisk } from "../security/risk-gate.js";
 import { createLazyRuntimeSurface } from "../shared/lazy-runtime.js";
 import { scanArgvForExternalContentByParam } from "../shared/process-external-content-bodies.js";
 import {
@@ -124,7 +125,8 @@ type HookBlockedReason =
   | "plugin-before-tool-call"
   | "plugin-approval"
   | "tool-loop"
-  | "controller-rejection";
+  | "controller-rejection"
+  | "plan-cfi-rejection";
 type HookOutcome =
   | {
       blocked: true;
@@ -926,6 +928,34 @@ export async function runBeforeToolCallHook(args: {
           triggeredCanaries: verdict.matchedBodies,
         });
       }
+    }
+  }
+
+  // L3 — plan control-flow integrity. If the run has an approved plan, a tool
+  // call matching no approved step is an unsanctioned action: injection can fill
+  // an approved step's free parameters but cannot add a step. Dormant (no-op)
+  // until a plan is seeded for the run, so flows that never plan are unaffected.
+  if (args.ctx?.runId) {
+    const riskVerdict = evaluateToolRisk({ runId: args.ctx.runId, toolName, params });
+    if (riskVerdict.block) {
+      tryAppendAuditEntry({
+        entryId: randomUUID(),
+        toolName: `plan_cfi_rejected:${toolName}`,
+        argv: params,
+      });
+      log.warn(`[plan-cfi] dispatch blocked: tool=${toolName} reason=${riskVerdict.reason}`, {
+        event: "plan_cfi.dispatch_blocked",
+        tool_name: toolName,
+        reason: riskVerdict.reason,
+        tool_call_id: args.toolCallId,
+      });
+      return {
+        blocked: true,
+        kind: "veto",
+        deniedReason: "plan-cfi-rejection",
+        reason: riskVerdict.reason,
+        params,
+      };
     }
   }
 

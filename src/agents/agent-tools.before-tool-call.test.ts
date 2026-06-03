@@ -14,6 +14,7 @@ import { clearApprovedPlansForTests, setApprovedPlan } from "../security/plan-cf
 import {
   clearExternalContentBodiesForTests,
   recordExternalContentBody,
+  setExternalContentTouchScope,
 } from "../shared/process-external-content-bodies.js";
 import { runBeforeToolCallHook } from "./agent-tools.before-tool-call.js";
 import { callGatewayTool } from "./tools/gateway.js";
@@ -272,6 +273,11 @@ describe("before_tool_call external-content canary gate", () => {
         },
       ],
     });
+    // CFI enforces only after the run ingests untrusted content (the injection
+    // precondition); mark run-cfi as having touched it.
+    setExternalContentTouchScope("run-cfi");
+    recordExternalContentBody("untrusted external body long enough to taint");
+    setExternalContentTouchScope(undefined);
 
     const outcome = await runBeforeToolCallHook({
       toolName: "exec",

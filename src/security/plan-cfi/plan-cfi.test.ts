@@ -6,12 +6,25 @@
  * holds, and the risk gate must block unsanctioned calls only when a plan exists.
  */
 import { afterEach, describe, expect, it } from "vitest";
+import {
+  clearExternalContentBodiesForTests,
+  recordExternalContentBody,
+  setExternalContentTouchScope,
+} from "../../shared/process-external-content-bodies.js";
 import { evaluateToolRisk } from "../risk-gate.js";
 import { matchToolCallToPlan } from "./plan-cfi.js";
 import type { ApprovedPlan, PlanStep } from "./plan-step.types.js";
 import { clearApprovedPlansForTests, setApprovedPlan } from "./plan-store.js";
 
 const RUN = "run-1";
+
+// Mark RUN as having ingested untrusted content, the precondition for CFI to
+// enforce (before ingestion there is no injection vector, so the gate is open).
+function markRunTouchedUntrustedContent(): void {
+  setExternalContentTouchScope(RUN);
+  recordExternalContentBody("untrusted external body long enough to taint");
+  setExternalContentTouchScope(undefined);
+}
 
 function plan(steps: PlanStep[]): ApprovedPlan {
   return { planId: "p1", runId: RUN, steps };
@@ -32,6 +45,7 @@ function step(over: Partial<PlanStep>): PlanStep {
 
 afterEach(() => {
   clearApprovedPlansForTests();
+  clearExternalContentBodiesForTests();
 });
 
 describe("matchToolCallToPlan", () => {
@@ -141,8 +155,17 @@ describe("evaluateToolRisk", () => {
     });
   });
 
-  it("blocks an unsanctioned call once a plan exists", () => {
+  it("does NOT block an unsanctioned call before untrusted content is ingested", () => {
     setApprovedPlan(plan([step({ toolName: "read" })]));
+    // No untrusted content touched yet → no injection vector → gate stays open.
+    expect(evaluateToolRisk({ runId: RUN, toolName: "exec", params: { command: "rm" } })).toEqual({
+      block: false,
+    });
+  });
+
+  it("blocks an unsanctioned call after untrusted content is ingested", () => {
+    setApprovedPlan(plan([step({ toolName: "read" })]));
+    markRunTouchedUntrustedContent();
     const verdict = evaluateToolRisk({ runId: RUN, toolName: "exec", params: { command: "rm" } });
     expect(verdict.block).toBe(true);
     if (verdict.block) {
@@ -155,6 +178,7 @@ describe("evaluateToolRisk", () => {
     process.env.OPENCLAW_SECURITY_PLAN_CFI = "off";
     try {
       setApprovedPlan(plan([step({ toolName: "read" })]));
+      markRunTouchedUntrustedContent(); // would block if enabled; the flag is the only thing opening it
       expect(evaluateToolRisk({ runId: RUN, toolName: "exec", params: {} })).toEqual({
         block: false,
       });

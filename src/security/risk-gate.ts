@@ -12,6 +12,7 @@
  *
  * @internal
  */
+import { didCorrelationTouchExternalContent } from "../shared/process-external-content-bodies.js";
 import { matchToolCallToPlan } from "./plan-cfi/plan-cfi.js";
 
 const PLAN_CFI_ENV_VAR = "OPENCLAW_SECURITY_PLAN_CFI";
@@ -31,9 +32,11 @@ export type RiskVerdict = { block: false } | { block: true; reason: string };
 
 /**
  * Evaluate whether a tool call should be blocked before dispatch. Returns
- * `{block:false}` when CFI is disabled, the run has no plan, or the call matches
- * an approved step; `{block:true}` only when an approved plan exists and the call
- * matches no step (unsanctioned action / control-flow violation).
+ * `{block:true}` only when CFI is enabled, the run has an approved plan, the call
+ * matches no step, AND the run has already ingested untrusted content. The last
+ * condition is the safety floor: before any untrusted content enters a run there
+ * is no injection vector, so vetoing the model's own trusted calls would only
+ * break normal runs. Every other case is `{block:false}`.
  */
 export function evaluateToolRisk(input: {
   runId: string;
@@ -45,6 +48,9 @@ export function evaluateToolRisk(input: {
   }
   const match = matchToolCallToPlan(input);
   if (match.matched || match.reason === "no_plan") {
+    return { block: false };
+  }
+  if (!didCorrelationTouchExternalContent(input.runId)) {
     return { block: false };
   }
   return { block: true, reason: `plan-cfi:${match.reason}:${match.detail}` };

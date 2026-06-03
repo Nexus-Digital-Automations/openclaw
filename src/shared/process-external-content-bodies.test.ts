@@ -89,6 +89,22 @@ describe("per-correlation-id touch scope (D.1)", () => {
     expect(didCorrelationTouchExternalContent("corr-clean")).toBe(false);
   });
 
+  // L2: concurrent runs must not clobber each other's scope. A module-global
+  // pointer would attribute run A's recorded body to run B after interleaving.
+  it("isolates touch scope across concurrent runs", async () => {
+    async function runTurn(id: string, body: string): Promise<void> {
+      setExternalContentTouchScope(id);
+      await Promise.resolve(); // yield so the other run interleaves
+      recordExternalContentBody(body);
+    }
+    await Promise.all([
+      runTurn("run-a", "untrusted body from run A long enough to taint"),
+      runTurn("run-b", "untrusted body from run B long enough to taint"),
+    ]);
+    expect(didCorrelationTouchExternalContent("run-a")).toBe(true);
+    expect(didCorrelationTouchExternalContent("run-b")).toBe(true);
+  });
+
   it("returns false for empty correlation id", () => {
     expect(didCorrelationTouchExternalContent("")).toBe(false);
   });
